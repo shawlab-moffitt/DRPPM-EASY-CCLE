@@ -70,7 +70,7 @@ With this being an extention of the DRPPM-EASY app, many of the features are sim
 
 ## CCLE Sample Selection
 
-![alt text](https://github.com/shawlab-moffitt/DRPPM-EASY-ExprAnalysisShinY/blob/main/App_Demo_Pictures/EASY_Heatmap.png?raw=true)
+![alt text](https://github.com/shawlab-moffitt/DRPPM-EASY-CCLE/blob/main/Example_App_Pictures/EASE_CCLE_Samples.png?raw=true)
 
 1. Users may select samples based on cancer lineage or disease type.
    * Based on this selection different drop down boxes will appear
