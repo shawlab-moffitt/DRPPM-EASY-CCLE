@@ -79,6 +79,17 @@ With this being an extention of the DRPPM-EASY app, many of the features are sim
 3. Once the choices are made the user must update the data selection by pressing the button shown.
 4. When the data is updated the meta data and expresison matirx that will be used will be show below.
 
+### CCLE Sample Selection and Ouput example
+
+![alt text](https://github.com/shawlab-moffitt/DRPPM-EASY-CCLE/blob/main/Example_App_Pictures/CCLE_example_output.png?raw=true)
+
+A. In this use case of the App we have selected all sub-liniages of the Ovary which are catagorized based on their TP53 mutation status.
+B. These samples were used in single sample GSEA (ssGSEA) with a gene set defining DNA damage response by Amundson *et al.*
+C. Next we selected non-small cell lung cancer samples to catagorize based on their KRAS mutation status.
+D. We then performed GSEA with the MSigDB Hallmark gene set for unfolded protein response on the subset samples.
+E. Additionally, we could visualize the ssGSEA score related to GOBP Protein LLocalization to Cytoplasmic Stress Granule formation.
+
+
 # Future Enhancments
 
 * Allows for download of the selcted CCLE data
