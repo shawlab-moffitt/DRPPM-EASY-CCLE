@@ -1,6 +1,9 @@
 # DRPPM-EASY-CCLE
 
-This is an extention of the [DRPPM Expression Analysis ShinY (EASY) App](https://github.com/shawlab-moffitt/DRPPM-EASY-ExprAnalysisShinY) which integrates data from the [Cancer Cell Line Encyclopedia (CCLE)](https://sites.broadinstitute.org/ccle/) for sample selection perform differential gene expression and gene set enrichment analyses. This R Shiny app is very similar in features to the main app, expect for the addition of the first tab which allows for CCLE sample selection. Based on this selection, the expression and meta data will be subset and imported in the back end to the app for further analysis and visualization. 
+This is an extention of the [DRPPM Expression Analysis ShinY (EASY) App](https://github.com/shawlab-moffitt/DRPPM-EASY-ExprAnalysisShinY) which integrates data from the [Cancer Cell Line Encyclopedia (CCLE)](https://sites.broadinstitute.org/ccle/) for sample selection perform differential gene expression and gene set enrichment analyses. This R Shiny app is very similar in features to the main app, expect for the addition of the first tab which allows for CCLE sample selection. Based on this selection, the expression and meta data will be subset and imported in the back end to the app for further analysis and visualization. Below is a schematic for the DRPPM-EASY-CCLE pipeline.
+
+<img src="https://github.com/shawlab-moffitt/DRPPM-EASY-ExprAnalysisShinY/blob/main/App_Demo_Pictures/EASY_CCLE_FlowChart.png" width="900">
+
 
 # Installation
 
