@@ -3,15 +3,22 @@
 
 ####----Install and load packages----####
 
-packages <- c("shiny","shinythemes","shinyjqui","pheatmap","RColorBrewer","clusterProfiler",
-              "dplyr","DT","enrichplot","ggplot2","ggpubr","msigdbr","reshape2","tibble","plotly",
-              "readr","limma","enrichR","ggrepel","tidyr","GSVA","tools","shinycssloaders")
+packages <- c("shiny","shinythemes","shinyjqui","pheatmap","BiocManager",
+              "dplyr","DT","ggplot2","ggpubr","reshape2","tibble",
+              "plotly","readr","enrichR","ggrepel","tidyr","tools","shinycssloaders")
+
 installed_packages <- packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
     install.packages(packages[!installed_packages])
 }
-
+#bioconductor packages
+bioCpacks <- c("clusterProfiler","GSVA","limma","enrichplot")
+installed_packages_BIOC <- bioCpacks %in% rownames(installed.packages())
+if (any(installed_packages_BIOC == FALSE)) {
+    BiocManager::install(bioCpacks[!installed_packages_BIOC], ask = F)
+}
 invisible(lapply(packages, library, character.only = TRUE))
+invisible(lapply(bioCpacks, library, character.only = TRUE))
 
 
 
