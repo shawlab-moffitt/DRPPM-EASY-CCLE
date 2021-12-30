@@ -31,10 +31,10 @@ ProjectName <- "CCLE Cell Line Analysis"
 ##--User Input File Names--##
 
 #expression data
-expr_file <- "CCLE_OvarianCancer_TP53_expr.tsv"
+expr_file <- "~/R/DRPPM-EASY-CCLE-main/ExampleData/CCLE_OvarianCancer_TP53_expr.tsv"
 
 #meta data
-meta_file <- "CCLE_OvarianCancer_TP53_meta.tsv"
+meta_file <- "~/R/DRPPM-EASY-CCLE-main/ExampleData/CCLE_OvarianCancer_TP53_meta.tsv"
 #Is there a header?
 header <- TRUE
 
@@ -51,22 +51,22 @@ human <- TRUE
 userGSlist_name <- 'CellMarker Gene Sets'
 
 #path to your gene set file .gmt or .txt/.tsv
-userGS_file <- 'CellMarker_gsNsym_HS.tsv'
+userGS_file <- '~/R/DRPPM-EASY-CCLE-main/GeneSetData/CellMarker_gsNsym_HS.tsv'
 #Does gene set file have header?
 header.gs <- TRUE
 
 #path to your R data list object for ssGSEA
-userRData_file <- 'CellMarker_GS_HS.RData'
+userRData_file <- '~/R/DRPPM-EASY-CCLE-main/GeneSetData/CellMarker_GS_HS.RData'
 #userRData_file <- 'CellMarker_GS_HS.RData'
 
 
 ## ADD CCLE input
 #CCLE Master Meta
-ccle_meta_file <- 'CCLE_meta_trim_NewName.tsv'
+ccle_meta_file <- '~/R/DRPPM-EASY-CCLE-main/CCLE_data/CCLE_meta_trim_NewName.tsv'
 #CCLE expression
-ccle_expr_file <- 'CCLE_expr_trim_NewName.tsv'
+ccle_expr_file <- '~/R/DRPPM-EASY-CCLE-main/CCLE_data/CCLE_expr_trim_NewName.tsv'
 #Name Map
-ccle_namemap_file <- 'CCLE_NameMap.tsv'
+ccle_namemap_file <- '~/R/DRPPM-EASY-CCLE-main/CCLE_data/CCLE_NameMap.tsv'
 
 ####----Read Files----####
 
@@ -102,11 +102,11 @@ ccle_disease_choice <- unique(ccle_meta$primary_disease)
 
 if (human == TRUE) {
     #MSigDB gene set
-    msigdb <- 'msigdb_gsNsym_HS.tsv'
+    msigdb <- '~/R/DRPPM-EASY-CCLE-main/GeneSetData/msigdb_gsNsym_HS.tsv'
     #MSigDB gene set FOR UI
-    msigdb2 <- 'msigdb_gsNcat_HS.tsv'
+    msigdb2 <- '~/R/DRPPM-EASY-CCLE-main/GeneSetData/msigdb_gsNcat_HS.tsv'
     #gene set list for ssGSEA
-    load('gs_list_HS.RData')
+    load('~/R/DRPPM-EASY-CCLE-main/GeneSetData/gs_list_HS.RData')
     #Cytokine genes for human
     CTKgenes <- c("IL2","IL12A","IL12B","IL17A","IFNA1","IFNB1","IFNG","IFNGR","CD11b",
                   "ITGAM","CD33","ENTPD1","ICOSLG","CD275","CD278","TNFSF9","TNFRSF9",
@@ -117,11 +117,11 @@ if (human == TRUE) {
 }
 if (human == FALSE) {
     #MSigDB gene set
-    msigdb <- 'msigdb_gsNsym_MM.tsv'
+    msigdb <- 'm~/R/DRPPM-EASY-CCLE-main/GeneSetData/sigdb_gsNsym_MM.tsv'
     #MSigDB gene set FOR UI
-    msigdb2 <- 'msigdb_gsNcat_MM.tsv'
+    msigdb2 <- '~/R/DRPPM-EASY-CCLE-main/GeneSetData/msigdb_gsNcat_MM.tsv'
     #gene set list for ssGSEA 
-    load('gs_list_MM.RData')
+    load('~/R/DRPPM-EASY-CCLE-main/GeneSetData/gs_list_MM.RData')
     #Cytokiny genes for mouse
     CTKgenes <- c("Il2","Il12a","Il12b","Il17a","Ifna13","Ifnb1","Ifng","Ifngr1","Cd11b","Itgam",
                   "Cd33","Entpd1","Icosl","Icos","Tnfsf9","Tnfrsf9","Cd40","Cd40lg","Cd70","Cd27",
