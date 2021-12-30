@@ -22,8 +22,7 @@ invisible(lapply(bioCpacks, library, character.only = TRUE))
 
 
 
-
-####----User Data Input----####
+#####----User Data Input----####
 
 #Input desired project name for webpage - will be followed by 'Expression Analysis'
 ProjectName <- "CCLE Cell Line Analysis"
@@ -32,10 +31,10 @@ ProjectName <- "CCLE Cell Line Analysis"
 ##--User Input File Names--##
 
 #expression data
-expr_file <- "htseq_gene_level_fpkm_T_geneName_max_1cutoff_v2.txt"
+expr_file <- "CCLE_OvarianCancer_TP53_expr.tsv"
 
 #meta data
-meta_file <- "USP7_meta.tsv"
+meta_file <- "CCLE_OvarianCancer_TP53_meta.tsv"
 #Is there a header?
 header <- TRUE
 
@@ -63,18 +62,21 @@ userRData_file <- 'CellMarker_GS_HS.RData'
 
 ## ADD CCLE input
 #CCLE Master Meta
-ccle_meta_file <- 'MasterMeta_v2.tsv'
+ccle_meta_file <- 'CCLE_meta_trim_NewName.tsv'
 #CCLE expression
-ccle_expr_file <- 'CCLE_expression.tsv'
+ccle_expr_file <- 'CCLE_expr_trim_NewName.tsv'
+#Name Map
+ccle_namemap_file <- 'CCLE_NameMap.tsv'
 
 ####----Read Files----####
 
 #read ccle_meta
 ccle_meta <- as.data.frame(read_tsv(ccle_meta_file))
 #read ccle_expression
-ccle_expr <- as.data.frame(read_csv(ccle_expr_file))
+ccle_expr <- as.data.frame(read_tsv(ccle_expr_file))
 rownames(ccle_expr) <- ccle_expr[,1]
 ccle_expr <- ccle_expr[,-1]
+ccle_namemap <- as.data.frame(read_tsv(ccle_namemap_file))
 
 ####----Selection Generation----####
 
@@ -84,7 +86,7 @@ ccle_expr <- ccle_expr[,-1]
 ccle_lineage_choice <- unique(ccle_meta$lineage)
 #ccle_lineage_choice <- c(ccle_lineage_choice,"All")
 
-ccle_genecols <- colnames(ccle_meta)[c(15:ncol(ccle_meta))]
+ccle_genecols <- colnames(ccle_meta)[c(16:ncol(ccle_meta))]
 ccle_genecols <- "NoneSelected"
 ccle_genecols <- c(ccle_genecols,gsub("_.*","",ccle_genecols))
 
@@ -130,7 +132,6 @@ if (human == FALSE) {
 
 
 
-
 ####----Read and Manipulate Files----####
 
 
@@ -143,7 +144,7 @@ expr <- expr %>%
     drop_na()
 row.names(expr) <- make.names(expr[,1], unique = T)
 expr <- expr[,-1]
-colnames(expr) <- gsub("[_.-]", "_", colnames(expr))
+colnames(expr) <- gsub("[_.-]", ".", colnames(expr))
 A <- as.matrix(expr)
 
 #gene list file from expression data
@@ -153,7 +154,7 @@ geneList <- as.data.frame(Gene)
 
 #meta
 meta <- read.delim(meta_file, sep = '\t', header = header, strip.white = T)
-meta[,1] <- gsub("[_.-]", "_", meta[,1])
+meta[,1] <- gsub("[_.-]", ".", meta[,1])
 colnames(meta) <- c("SampleName","Group")
 metagroups <- as.vector(levels(factor(meta[,2])))
 
@@ -256,10 +257,10 @@ shinytheme("sandstone")
 
 ui <-
     
-    navbarPage(paste("{",ProjectName,"Expression Analysis }", sep=" "),
+    navbarPage(paste("{ ",ProjectName," Expression Analysis }", sep=""),
                
                ####----Intro Tab----####
-
+               
                tabPanel("Intro/Methodology",
                         fluidPage(
                             mainPanel(
@@ -282,124 +283,221 @@ ui <-
                                 )
                             )
                         ),
-
-
-	       tabPanel("Sample Selection",
-                   fluidPage(
-                       mainPanel(
-                           fluidRow(
-                               column(6,
-                                      h4("Subset CCLE Samples by Lineage or Disease type:"),
-                                      radioButtons("linordischeck","",
-                                                         choices = list("Lineage" = 1,
-                                                                        "Disease Type" = 2)),
-                                      uiOutput("subsetselec"),
-                                      uiOutput("sublinselec")
-                                      ),
-                               column(6,
-                                      h4("Condition Selection:"),
-                                      radioButtons("condseleccheck","",
-                                                         choices = list("Sex" = 1,
-                                                                        #"Sample Source" = 2,
-                                                                        "Sample Collection Site" = 3,
-                                                                        "Primary or Metastasis" = 4,
-                                                                        "Choose Gene of Interest" = 5)),
-                                      uiOutput("condselec")
-                                      )
-                           ),
-                           fluidRow(
-                               #column(6,
-                                      #textInput("ccle_exprFileName","Expression File Download Name:",
-                                       #         value = "ExpressionData")),
-                                      #downloadButton("downloadEXPR","Download Expression Matrix"),
-				      #actionButton("updateEXPR", "UpdateEXPR")),
-                               column(12,
-                                      #textInput("ccle_metaFileName","Meta File Download Name:",
-                                      #          value = "MetaData"),
-                                      #downloadButton("downloadMETA","Download Meta Data"),
-				      actionButton("updateMETA", "Load/Update Selected Data")
-                               )
-
-                           ),
-			   fluidRow(
-
-                               div(DT::dataTableOutput("testtable"), style = "font-size:10px; height:500px; overflow-X: scroll"),
-                               div(DT::dataTableOutput("testexprtable"), style = "font-size:10px; height:500px; overflow-X: scroll"),
-			   )
-                       )
-                     )
+               
+               ####----Sample Selection Tab----####
+               
+               tabPanel("Sample Selection",
+                        fluidPage(
+                            mainPanel(
+                                fluidRow(
+                                    column(6,
+                                           h4("Subset CCLE Samples by Lineage or Disease type:"),
+                                           radioButtons("linordischeck","",
+                                                        choices = list("Lineage" = 1,
+                                                                       "Disease Type" = 2)),
+                                           uiOutput("subsetselec"),
+                                           uiOutput("sublinselec")
+                                    ),
+                                    column(6,
+                                           h4("Condition Selection:"),
+                                           radioButtons("condseleccheck","",
+                                                        choices = list("Sex" = 1,
+                                                                       #"Sample Source" = 2,
+                                                                       "Sample Collection Site" = 3,
+                                                                       "Primary or Metastasis" = 4,
+                                                                       "Choose Gene of Interest" = 5)),
+                                           uiOutput("condselec")
+                                    )
+                                ),
+                                fluidRow(
+                                    column(12,
+                                           actionButton("updateMETA", "Load/Update Selected Data"),
+                                           p()
+                                    )
+                                ),
+                                fluidRow(
+                                    column(4,
+                                           h4("Meta Data"),
+                                           div(DT::dataTableOutput("testtable"), style = "font-size:10px; height:450px"),
+                                           uiOutput("downloadMETAbutton")),
+                                    column(4,
+                                           h4("Expression Data"),
+                                           div(DT::dataTableOutput("testexprtable"), style = "font-size:10px; height:450px"),
+                                           uiOutput("downloadEXPRbutton")),
+                                    column(4,
+                                           h4("Cell Line Name Guide"),
+                                           #uiOutput("CellLineMapHeader"),
+                                           div(DT::dataTableOutput("CellLineNames"), style = "font-size:10px; height:450px"),
+                                           uiOutput("downloadNameMapbutton"))
+                                )
+                            )
+                        )
                ),
-		
-
-               #tabPanel("Intro/Methodology",
+               
+               
+               #tabPanel("Sample Selection",
                #         fluidPage(
                #             mainPanel(
-               #                 h2("GSEA and RNAseq Analysis Method"),
-               #                 p("Mapped reads were derived from BBSR and likely normalized to CPM. Pathway enrichment analysis was performed by GSEA [PMID: 16199517] and enrichR[PMID: 23586463]. Single-sample gene set enrichment analysis (ssGSEA) [PMID: 19847166, PMID: 30595505] was used to quantify the expression signatures. LIMMA was used to define differentially expressed genes [PMID: PMID: 25605792]"))
+               #                 fluidRow(
+               #                     column(6,
+               #                            h4("Subset CCLE Samples by Lineage or Disease type:"),
+               #                            radioButtons("linordischeck","",
+               #                                         choices = list("Lineage" = 1,
+               #                                                        "Disease Type" = 2)),
+               #                            uiOutput("subsetselec"),
+               #                            uiOutput("sublinselec")
+               #                     ),
+               #                     column(6,
+               #                            h4("Condition Selection:"),
+               #                            radioButtons("condseleccheck","",
+               #                                         choices = list("Sex" = 1,
+               #                                                        #"Sample Source" = 2,
+               #                                                        "Sample Collection Site" = 3,
+               #                                                        "Primary or Metastasis" = 4,
+               #                                                        "Choose Gene of Interest" = 5)),
+               #                            uiOutput("condselec")
+               #                     )
+               #                 ),
+               #                 fluidRow(
+               #                     #column(6,
+               #                     #textInput("ccle_exprFileName","Expression File Download Name:",
+               #                     #         value = "ExpressionData")),
+               #                     #downloadButton("downloadEXPR","Download Expression Matrix"),
+               #                     #actionButton("updateEXPR", "UpdateEXPR")),
+               #                     column(12,
+               #                            #textInput("ccle_metaFileName","Meta File Download Name:",
+               #                            #          value = "MetaData"),
+               #                            #downloadButton("downloadMETA","Download Meta Data"),
+               #                            actionButton("updateMETA", "Load/Update Selected Data")
+               #                     )
+               #                     
+               #                 ),
+               #                 fluidRow(
+               #                     
+               #                     div(DT::dataTableOutput("testtable"), style = "font-size:10px; height:500px; overflow-X: scroll"),
+               #                     div(DT::dataTableOutput("testexprtable"), style = "font-size:10px; height:500px; overflow-X: scroll"),
+               #                 )
+               #             )
                #         )
                #),
                
-               ####----RNAseq Tab----####
+               ####----Data Exploration Tab----####
                
-               tabPanel("Standard Analysis",
+               tabPanel("Data Exploration",
                         fluidPage(
-                            title = "Standard Analysis",
+                            title = "Data Exploration",
                             sidebarLayout(
                                 sidebarPanel(
                                     
-                                    #heatmap side panel
+                                    ##--Unsupervised Clustering Heatmap--##
                                     
                                     conditionalPanel(condition = "input.dataset == '22'",
-                                                     tabsetPanel(id = "customs",
-                                                                 tabPanel("Parameters",
-                                                                          p(),
-                                                                          numericInput("NumFeatures", step = 1, label = "Number of Genes", value = 100),
-                                                                          h4("Clustering Parameters"),
-                                                                          selectInput("VarianceMeasure", "Select Variance Measure",
-                                                                                      choices = c("MAD","CV","VAR")),
-                                                                          selectInput("ClusteringMethod",
-                                                                                      "Select clustering Method",
-                                                                                      choices = c("complete", "ward.D", "ward.D2", "single", "average", "mcquitty", "median", "centroid")),
-                                                                          numericInput("NumClusters", step = 1, label = "Number of Clusters (Cut Tree with ~k)", value = 2),
-                                                                          h4("Download Cluster Result:"),
-                                                                          downloadButton("downloadClusters", "Download .tsv"),
-                                                                          h4("Download Most Variable Genes List:"),
-                                                                          downloadButton("MVGdownload", "Download MVG .tsv"),
-                                                                          downloadButton("MVGdownloadgmt", "Download MVG .gmt"),
-                                                                          p(),
-                                                                          sliderInput("heatmapFont2.c", "Heatmap Font Size (columns):",
-                                                                                      min = 5, max = 75,
-                                                                                      value = 12, step = 1),
-                                                                          sliderInput("heatmapFont2.r", "Heatmap Font Size (rows):",
-                                                                                      min = 5, max = 75,
-                                                                                      value = 9, step = 1),
-                                                                          value = 222
-                                                                 ),
-                                                                 tabPanel("Custom Heatmap",
-                                                                          p(),
-                                                                          selectizeInput("heatmapGeneSelec","Gene Selection:",
-                                                                                         choices = sort(as.vector(geneList[,1])),
-                                                                                         multiple = T, selected = CTKgenes),
-                                                                          textInput("userheatgenes", "Text Input of Gene List (space or tab delimited):", value = ""),
-                                                                          selectInput("ClusteringMethod2",
-                                                                                      "Select clustering Method",
-                                                                                      choices = c("complete", "ward.D", "ward.D2", "single", "average", "mcquitty", "median", "centroid")),
-                                                                          selectizeInput("userheatsamp2", "Samples Selection:",
-                                                                                         choices = sampsames, multiple = T, selected = sampsames),
-                                                                          sliderInput("heatmapFont3.c", "Heatmap Font Size (columns):",
-                                                                                      min = 5, max = 75,
-                                                                                      value = 12, step = 1),
-                                                                          sliderInput("heatmapFont3.r", "Heatmap Font Size (rows):",
-                                                                                      min = 5, max = 75,
-                                                                                      value = 12, step = 1),
-                                                                          value = 444
-                                                                 )
-                                                     )
+                                                     p(),
+                                                     numericInput("NumFeatures", step = 1, label = "Number of Genes", value = 100),
+                                                     h4("Clustering Parameters"),
+                                                     selectInput("VarianceMeasure", "Select Variance Measure",
+                                                                 choices = c("MAD","CV","VAR")),
+                                                     selectInput("ClusteringMethod",
+                                                                 "Select clustering Method",
+                                                                 choices = c("complete", "ward.D", "ward.D2", "single", "average", "mcquitty", "median", "centroid")),
+                                                     numericInput("NumClusters", step = 1, label = "Number of Clusters (Cut Tree with ~k)", value = 2),
+                                                     h4("Download Cluster Result:"),
+                                                     downloadButton("downloadClusters", "Download .tsv"),
+                                                     h4("Download Most Variable Genes List:"),
+                                                     downloadButton("MVGdownload", "Download MVG .tsv"),
+                                                     downloadButton("MVGdownloadgmt", "Download MVG .gmt"),
+                                                     p(),
+                                                     sliderInput("heatmapFont2.c", "Heatmap Font Size (columns):",
+                                                                 min = 5, max = 75,
+                                                                 value = 12, step = 1),
+                                                     sliderInput("heatmapFont2.r", "Heatmap Font Size (rows):",
+                                                                 min = 5, max = 75,
+                                                                 value = 9, step = 1)
                                     ),
                                     
-                                    #Volcano and MA plot side panel
+                                    ##--Custom Heatmap--##
                                     
-                                    conditionalPanel(condition = "input.dataset == '44' || input.dataset == '66'",
+                                    conditionalPanel(condition = "input.dataset == '33'",
+                                                     p(),
+                                                     selectizeInput("heatmapGeneSelec","Gene Selection:",
+                                                                    choices = sort(as.vector(geneList[,1])),
+                                                                    multiple = T, selected = CTKgenes),
+                                                     textInput("userheatgenes", "Text Input of Gene List (space or tab delimited):", value = ""),
+                                                     selectInput("ClusteringMethod2",
+                                                                 "Select clustering Method",
+                                                                 choices = c("complete", "ward.D", "ward.D2", "single", "average", "mcquitty", "median", "centroid")),
+                                                     selectizeInput("userheatsamp2", "Samples Selection:",
+                                                                    choices = sampsames, multiple = T, selected = sampsames),
+                                                     sliderInput("heatmapFont3.c", "Heatmap Font Size (columns):",
+                                                                 min = 5, max = 75,
+                                                                 value = 12, step = 1),
+                                                     sliderInput("heatmapFont3.r", "Heatmap Font Size (rows):",
+                                                                 min = 5, max = 75,
+                                                                 value = 12, step = 1)
+                                    ),
+                                    
+                                    ##--Gene scatter plot side panel--##
+                                    
+                                    conditionalPanel(condition = "input.dataset == '26'",
+                                                     p(),
+                                                     selectInput("scatterG1","Select Gene 1",
+                                                                 choices = Gene),
+                                                     selectInput("scatterG2","Select Gene 2",
+                                                                 choices = Gene, selected = Gene[2]),
+                                                     checkboxInput("logask","Log2 Transform Expression Data")
+                                    ),
+                                    
+                                    ##--Boxplot side panel--##
+                                    
+                                    conditionalPanel(condition = "input.dataset == '34'",
+                                                     p(),
+                                                     h3("Select A Gene:"),
+                                                     div(DT::dataTableOutput("GeneListTable2"), style = "font-size:10px"),
+                                                     p(),
+                                                     sliderInput("boxplot.font2", "Font Size:",
+                                                                 min = 5, max = 75,
+                                                                 value = 15, step = 1),
+                                                     sliderInput("boxplotDot2", "Box Plot Dot Size:",
+                                                                 min = 0, max = 5,
+                                                                 value = 0.75, step = .25)
+                                    )
+                                ),
+                                mainPanel(
+                                    tabsetPanel(
+                                        id = "dataset",
+                                        tabPanel("Unsupervised Clustering Heatmap",
+                                                 withSpinner(jqui_resizable(plotOutput("heatmap1", width = "100%", height = "1000px")), type = 6),
+                                                 value = 22),
+                                        tabPanel("Custom Heatmap",
+                                                 withSpinner(jqui_resizable(plotOutput("heatmap2", width = "100%", height = "1000px")), type = 6),
+                                                 value = 33),
+                                        tabPanel("Gene Scatter Plot",
+                                                 p(),
+                                                 withSpinner(jqui_resizable(plotlyOutput("geneScatter0", height = "500px")), type = 6),
+                                                 DT::dataTableOutput("geneScatterTable"),
+                                                 downloadButton("geneScatterDownload", "Download Non-log2 Transformed .tsv"),
+                                                 value = 26),
+                                        tabPanel("Box Plots",
+                                                 p(),
+                                                 withSpinner(jqui_resizable(plotOutput('boxplot3', width = "100%", height = "600px")), type = 6),
+                                                 value = 34)
+                                    )
+                                )
+                            )
+                        )
+               ),
+               
+               ####----Differential Expression Analysis----####
+               
+               tabPanel("Differential Expression Analysis",
+                        fluidPage(
+                            title = "Differential Expression Analysis",
+                            sidebarLayout(
+                                sidebarPanel(
+                                    
+                                    ##--Volcano and MA plot side panel--##
+                                    
+                                    conditionalPanel(condition = "input.datasettwo == '44' || input.datasettwo == '66'",
                                                      p(),
                                                      selectInput("comparisonA2", "Comparison: GroupA",
                                                                  choices = metagroups, selected = metagroups[1]),
@@ -416,9 +514,9 @@ ui <-
                                                      textInput("userGeneSelec2", "Text Input of Gene List (space or tab delimited):", value = "")
                                     ),
                                     
-                                    #Boxplot side panel
+                                    ##--Boxplot side panel--##
                                     
-                                    conditionalPanel(condition = "input.dataset == '88'",
+                                    conditionalPanel(condition = "input.datasettwo == '88'",
                                                      p(),
                                                      h3("Select A Gene:"),
                                                      div(DT::dataTableOutput("GeneListTable"), style = "font-size:10px"),
@@ -431,20 +529,9 @@ ui <-
                                                                  value = 0.75, step = .25)
                                     ),
                                     
-                                    #Gene scatter plot side panel
+                                    ##--EnrichR pathway side panel--##
                                     
-                                    conditionalPanel(condition = "input.dataset == '26'",
-                                                     p(),
-                                                     selectInput("scatterG1","Select Gene 1",
-                                                                 choices = Gene),
-                                                     selectInput("scatterG2","Select Gene 2",
-                                                                 choices = Gene, selected = Gene[2]),
-                                                     checkboxInput("logask","Log2 Transform Expression Data")
-                                    ),
-                                    
-                                    #EnrichR pathway side panel
-                                    
-                                    conditionalPanel(condition = "input.dataset == '28'",
+                                    conditionalPanel(condition = "input.datasettwo == '28'",
                                                      selectInput("comparisonA2.path", "Comparison: GroupA",
                                                                  choices = metagroups, selected = metagroups[1]),
                                                      selectInput("comparisonB2.path", "Comparison: GroupB",
@@ -457,9 +544,9 @@ ui <-
                                                                  choices = enrichRchoice)
                                     ),
                                     
-                                    #DEG table side panel
+                                    ##--DEG table side panel--##
                                     
-                                    conditionalPanel(condition = "input.dataset == '24'",
+                                    conditionalPanel(condition = "input.datasettwo == '24'",
                                                      p(),
                                                      selectInput("comparisonA2.DEG", "Comparison: GroupA",
                                                                  choices = metagroups, selected = metagroups[1]),
@@ -475,14 +562,11 @@ ui <-
                                                                   min = 0, max = 10, step = 0.1, value = 0.05),
                                                      numericInput("top_x2", "Number of Top Hits:", value = 100),
                                                      downloadButton("DEGgmtDownload", "Download DEG .gmt")
-                                    ),
+                                    )
                                 ),
                                 mainPanel(
                                     tabsetPanel(
-                                        id = "dataset",
-                                        tabPanel("Heatmap",
-                                                 withSpinner(jqui_resizable(plotOutput("heatmap1", width = "100%", height = "1000px")), type = 6),
-                                                 value = 22),
+                                        id = "datasettwo",
                                         tabPanel("Volcano Plot",
                                                  p(),
                                                  verbatimTextOutput("VolGroupsText"),
@@ -501,23 +585,13 @@ ui <-
                                                  p(),
                                                  withSpinner(jqui_resizable(plotOutput('boxplot1', width = "100%", height = "600px")), type = 6),
                                                  value = 88),
-                                        tabPanel("Gene Scatter Plot",
-                                                 p(),
-                                                 withSpinner(jqui_resizable(plotlyOutput("geneScatter0", height = "500px")), type = 6),
-                                                 DT::dataTableOutput("geneScatterTable"),
-                                                 downloadButton("geneScatterDownload", "Download Non-log2 Transformed .tsv"),
-                                                 value = 26),
                                         tabPanel("Pathway Analysis",
-                                                 #verbatimTextOutput("upregpathtitle"),
-                                                 #h3("Up-regulated pathway"),
                                                  uiOutput("UpRegPathLabel"),
                                                  verbatimTextOutput("upregpath_text"),
                                                  withSpinner(plotOutput('UpRegPathway1'), type = 6),
                                                  div(DT::dataTableOutput("UpRegPathwayTable1"), style = "font-size:10px"),
                                                  downloadButton("UpRegPathDownload", "Download Table .tsv"),
                                                  downloadButton("UpRegPathDownloadgmt", "Download .gmt"),
-                                                 #verbatimTextOutput("dnregpathtitle"),
-                                                 #h3("Down-regulated pathway"),
                                                  uiOutput("DnRegPathLabel"),
                                                  verbatimTextOutput("downregpath_text"),
                                                  withSpinner(plotOutput('DnRegPathway1'), type = 6),
