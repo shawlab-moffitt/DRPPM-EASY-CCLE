@@ -22,20 +22,19 @@ invisible(lapply(bioCpacks, library, character.only = TRUE))
 
 
 
-
 ####----User Data Input----####
 
 #Input desired project name for webpage - will be followed by 'Expression Analysis'
-ProjectName <- "USP7 Human Demo"
+ProjectName <- "CCLE Cell Line Analysis"
 
 
 ##--User Input File Names--##
 
 #expression data
-expr_file <- "htseq_gene_level_fpkm_T_geneName_max_1cutoff_v2.txt"
+expr_file <- "CCLE_OvarianCancer_TP53_expr.tsv"
 
 #meta data
-meta_file <- "USP7_meta.tsv"
+meta_file <- "CCLE_OvarianCancer_TP53_meta.tsv"
 #Is there a header?
 header <- TRUE
 
@@ -58,13 +57,16 @@ header.gs <- TRUE
 
 #path to your R data list object for ssGSEA
 userRData_file <- 'CellMarker_GS_HS.RData'
+#userRData_file <- 'CellMarker_GS_HS.RData'
 
 
-## CCLE Input
-#Master Meta
-ccle_meta_file <- 'MasterMeta_v2.tsv'
-#ccle_expression
-ccle_expr_file <- 'CCLE_expression.tsv'
+## ADD CCLE input
+#CCLE Master Meta
+ccle_meta_file <- 'CCLE_meta_trim_NewName.tsv'
+#CCLE expression
+ccle_expr_file <- 'CCLE_expr_trim_NewName.tsv'
+#Name Map
+ccle_namemap_file <- 'CCLE_NameMap.tsv'
 
 
 ####----Read Files----####
@@ -72,9 +74,10 @@ ccle_expr_file <- 'CCLE_expression.tsv'
 #read ccle_meta
 ccle_meta <- as.data.frame(read_tsv(ccle_meta_file))
 #read ccle_expression
-ccle_expr <- as.data.frame(read_csv(ccle_expr_file))
+ccle_expr <- as.data.frame(read_tsv(ccle_expr_file))
 rownames(ccle_expr) <- ccle_expr[,1]
 ccle_expr <- ccle_expr[,-1]
+ccle_namemap <- as.data.frame(read_tsv(ccle_namemap_file))
 
 
 ####----Selection Generation----####
@@ -84,7 +87,7 @@ ccle_expr <- ccle_expr[,-1]
 ccle_lineage_choice <- unique(ccle_meta$lineage)
 #ccle_lineage_choice <- c(ccle_lineage_choice,"All")
 
-ccle_genecols <- colnames(ccle_meta)[c(15:ncol(ccle_meta))]
+ccle_genecols <- colnames(ccle_meta)[c(16:ncol(ccle_meta))]
 ccle_geneList <- "NoneSelected"
 ccle_geneList <- c(ccle_geneList,gsub("_.*","",ccle_genecols))
 
@@ -123,7 +126,6 @@ if (human == FALSE) {
                   "Ceacam1","Cd80","Cd86","Ctla4","Cd276","Vtcn1","Pvr","Cd226","Tigit","Cd96","Lgals3",
                   "Lgals3bp","Lgals9","Lgals9c","Havcr2","Hhla2","Cd274","Pdcd1lg2","Pdcd1","Vsir")
 }
-
 
 
 
@@ -251,365 +253,475 @@ enrichRchoice <- enrichRtab[,"libraryName"]
 
 
 server <- function(input, output, session) {
+    
+    
+    #observe user selection to choose based on lineage or disease, update UI based on selection
     observe({
         if (input$linordischeck == 1) {
             output$subsetselec <- renderUI({
-
+                
                 selectInput("firstChoice","Select Lineage:",choices = ccle_lineage_choice,
                             multiple = F, selected = ccle_lineage_choice[1])
-
+                
             })
         }
         if (input$linordischeck == 2) {
             output$subsetselec <- renderUI({
-
+                
                 selectInput("firstChoice","Select Primary Disease:",
                             choices = ccle_disease_choice, multiple = F,
                             selected = ccle_disease_choice[1])
-
+                
             })
         }
     })
     observe({
         if (input$condseleccheck == 5) {
             output$condselec <- renderUI({
-
+                
                 selectInput("geneselection","Select Gene of Interest:",
                             choices = ccle_geneList, selected = ccle_geneList[1])
-
-                })
+                
+            })
         }
     })
-
-    ###Tim added the following function 1 ###
-    ### initialize expr value
+    
+    ###--Tim added the following function 1--###
+    
+    # initialize values
     updated_expr <- reactiveVal(expr)
-    #expr <- reactiveVal(expr)
     meta <- reactiveVal(meta)
     geneList <- reactiveVal(geneList)
+    
+    
     ### End Tim added function 1 ###
-
-    # generate a reactive meta variable
-    observeEvent(input$updateEXPR, {
-
-            firstChoice <- input$firstChoice
-            secondChoice <- input$secondChoice
-
-            if (firstChoice %in% ccle_disease_choice) {
-
-                samples <- unlist(ccle_meta[which(ccle_meta$primary_disease == firstChoice),1], use.names = F)
-                ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
-                ccle_expr_sub$gene <- rownames(ccle_expr_sub)
-                ccle_expr_sub <- ccle_expr_sub %>%
-                    relocate(gene)
-            }
-            if (firstChoice %in% ccle_lineage_choice) {
-
-                if (secondChoice == "All_Sub_Lineages"){
-                    samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice),1], use.names = F)
-                }
-                else if (secondChoice != "All_Sub_Lineages"){
-                    samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),1], use.names = F)
-                }
-                ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
-                ccle_expr_sub$gene <- rownames(ccle_expr_sub)
-                ccle_expr_sub <- ccle_expr_sub %>%
-                    relocate(gene)
-            }
-
-
-	    expr <- ccle_expr_sub %>%
-		drop_na()
-		row.names(expr) <- make.names(expr[,1], unique = T)
-	    
-	    expr <- expr[,-1]
-		colnames(expr) <- gsub("[_.-]", ".", colnames(expr))
-		# gene list file from expression data
-		Gene <- rownames(expr)
-		geneList <- as.data.frame(Gene)
-	    geneList(geneList)
-
-
-		#meta
-		#meta <- read.delim(meta_file, sep = '\t', header = header, strip.white = T)
-	    meta <- meta();
-		meta[,1] <- gsub("[_.-]", ".", meta[,1])
-		colnames(meta) <- c("SampleName","Group")
-		metagroups <- as.vector(levels(factor(meta[,2])))
-
-		#boxplot choices based on meta groups
-		if (length(metagroups) == 2) {
-		    boxopt <- c("wilcox.test", "t.test", "none")
-		}
-		if (length(metagroups) >= 3) {
-		    boxopt <- c("kruskal.test", "anova", "none")
-		}
-
-		#for heatmap sample selection
-		sampsames <- intersect(colnames(expr),meta[,1])
-		#ensure expression samples and meta are exact
-		expr <- expr[,sampsames]
-		meta = meta[which(meta[,1] %in% sampsames),]
-            updated_expr(ccle_expr_sub[,-1]);
-
-	    meta(meta);
-
-	    updateSelectInput(session, "scatterG1","Select Gene 1", choices = Gene)
-            updateSelectInput(session, "scatterG2","Select Gene 2", choices = Gene, selected = Gene[2])
-	
-    })
+    
+    ## generate a reactive meta variable
+    #observeEvent(input$updateEXPR, {
+    #    
+    #    firstChoice <- input$firstChoice
+    #    secondChoice <- input$secondChoice
+    #    
+    #    if (firstChoice %in% ccle_disease_choice) {
+    #        
+    #        samples <- unlist(ccle_meta[which(ccle_meta$primary_disease == firstChoice),1], use.names = F)
+    #        ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
+    #        ccle_expr_sub$gene <- rownames(ccle_expr_sub)
+    #        ccle_expr_sub <- ccle_expr_sub %>%
+    #            relocate(gene)
+    #    }
+    #    if (firstChoice %in% ccle_lineage_choice) {
+    #        
+    #        if (secondChoice == "All_Sub_Lineages"){
+    #            samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice),1], use.names = F)
+    #        }
+    #        else if (secondChoice != "All_Sub_Lineages"){
+    #            samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),1], use.names = F)
+    #        }
+    #        ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
+    #        ccle_expr_sub$gene <- rownames(ccle_expr_sub)
+    #        ccle_expr_sub <- ccle_expr_sub %>%
+    #            relocate(gene)
+    #    }
+    #    
+    #    
+    #    expr <- ccle_expr_sub %>%
+    #        drop_na()
+    #    row.names(expr) <- make.names(expr[,1], unique = T)
+    #    
+    #    expr <- expr[,-1]
+    #    colnames(expr) <- gsub("[_.-]", ".", colnames(expr))
+    #    # gene list file from expression data
+    #    Gene <- rownames(expr)
+    #    geneList <- as.data.frame(Gene)
+    #    geneList(geneList)
+    #    
+    #    
+    #    #meta
+    #    #meta <- read.delim(meta_file, sep = '\t', header = header, strip.white = T)
+    #    meta <- meta();
+    #    meta[,1] <- gsub("[_.-]", ".", meta[,1])
+    #    colnames(meta) <- c("SampleName","Group")
+    #    metagroups <- as.vector(levels(factor(meta[,2])))
+    #    
+    #    #boxplot choices based on meta groups
+    #    if (length(metagroups) == 2) {
+    #        boxopt <- c("wilcox.test", "t.test", "none")
+    #    }
+    #    if (length(metagroups) >= 3) {
+    #        boxopt <- c("kruskal.test", "anova", "none")
+    #    }
+    #    
+    #    #for heatmap sample selection
+    #    sampsames <- intersect(colnames(expr),meta[,1])
+    #    #ensure expression samples and meta are exact
+    #    expr <- expr[,sampsames]
+    #    meta = meta[which(meta[,1] %in% sampsames),]
+    #    updated_expr(ccle_expr_sub[,-1]);
+    #    
+    #    meta(meta);
+    #    
+    #    updateSelectInput(session, "scatterG1","Select Gene 1", choices = Gene)
+    #    updateSelectInput(session, "scatterG2","Select Gene 2", choices = Gene, selected = Gene[2])
+    #    
+    #})
+    
+    #once 'update' button is pressed, run below to update analysis input
+    
     observeEvent(input$updateMETA, {
-	
-
-            firstChoice <- input$firstChoice
-            secondChoice <- input$secondChoice
-            if (firstChoice %in% ccle_lineage_choice) {
-
-                #subset ccle_meta based on lineage
-                if (secondChoice == "All_Sub_Lineages"){
-                    ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice),]
-                }
-                else if (secondChoice != "All_Sub_Lineages"){
-                    ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),]
-                }
-
-                cond <- input$condseleccheck
-
-                #user chooses gene of interest
-                if (cond == 5){
-
-                    if (input$geneselection != ccle_geneList[1]) {
-                        gene <- input$geneselection
-                        #assign NULL in case column not found
-                        genecold <- NULL
-                        genecolo <- NULL
-                        genecold <- paste(gene,"_damagingVariant",sep = "")
-                        genecolo <- paste(gene,"_otherVariant",sep = "")
-                        ccle_meta_sub <- ccle_meta.u[,c("DepMap_ID",genecold,genecolo)]
-                        ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
-                        #rename 
-                        #if (ncol(ccle_meta_sub) == 3) {
-                        ccle_meta_sub2 <- ccle_meta_sub %>%
-                            mutate(Condition = case_when(
-                                ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "FALSE" ~ "WT",
-                                ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "TRUE" ~ "NonDamagingVariant",
-                                ccle_meta_sub[,2] == "TRUE" & ccle_meta_sub[,3] == "FALSE" ~ "DamagingVariant"
-                            ))
-                        #}
-                        ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
-                        colnames(ccle_meta_sub3)[1] <- "SampleName"
-                        ccle_meta_sub <- ccle_meta_sub3
-                    }
-
-                }
-
-                #user chooses sex condition
-                if (cond == 1) {
-
-                    ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sex)
-                    colnames(ccle_meta.u2) <- c("SampleName","Condition")
-                    ccle_meta_sub <- ccle_meta.u2
-
-                }
-                if (cond == 3) {
-
-                    ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sample_collection_site)
-                    colnames(ccle_meta.u2) <- c("SampleName","Condition")
-                    ccle_meta_sub <- ccle_meta.u2
-
-                }
-                #user chooses Primary or ccle_metastasis
-                if (cond == 4) {
-
-                    ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,primary_or_ccle_metastasis)
-                    colnames(ccle_meta.u2) <- c("SampleName","Condition")
-                    ccle_meta_sub <- ccle_meta.u2
-
-                }
-
+        
+        ##assign user input values for lineage/disease choice
+        #lineage or disease selection
+        firstChoice <- input$firstChoice
+        #sub-lineage selection if lineage is chosen
+        secondChoice <- input$secondChoice
+        
+        #If first choice is a lineage -> subset meta based on chosen variables
+        if (firstChoice %in% ccle_lineage_choice) {
+            
+            #subset ccle_meta based on lineage and sub-lineage
+            if (secondChoice == "All_Sub_Lineages"){
+                ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice),]
             }
-            if (firstChoice %in% ccle_disease_choice) {
-
-                ccle_meta.u <- ccle_meta[which(ccle_meta$primary_disease == firstChoice),]
-                cond <- input$condseleccheck
-
-                #if user chooses gene of interest
-                if (cond == 5) {
-
-                    if (input$geneselection != ccle_geneList[1]) {
-                        gene <- input$geneselection
-                        #assign NULL in case column not found
-                        genecold <- NULL
-                        genecolo <- NULL
-                        genecold <- paste(gene,"_damagingVariant",sep = "")
-                        genecolo <- paste(gene,"_otherVariant",sep = "")
-                        ccle_meta_sub <- ccle_meta.u[,c("DepMap_ID",genecold,genecolo)]
-                        ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
-                        #rename 
-                        #if (ncol(ccle_meta_sub) == 3) {
-                        ccle_meta_sub2 <- ccle_meta_sub %>%
-                            mutate(Condition = case_when(
-                                ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "FALSE" ~ "WT",
-                                ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "TRUE" ~ "NonDamagingVariant",
-                                ccle_meta_sub[,2] == "TRUE" & ccle_meta_sub[,3] == "FALSE" ~ "DamagingVariant"
-                            ))
-                        #}
-                        ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
-                        colnames(ccle_meta_sub3)[1] <- "SampleName"
-                        ccle_meta_sub <- ccle_meta_sub3
-
-                    }
-                }
-                #user chooses sex condition
-                if (cond == 1) {
-
-                    ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sex)
-                    colnames(ccle_meta.u2) <- c("SampleName","Condition")
-                    ccle_meta_sub <- ccle_meta.u2
-
-                }
-                if (cond == 3) {
-
-                    ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sample_collection_site)
-                    colnames(ccle_meta.u2) <- c("SampleName","Condition")
-                    ccle_meta_sub <- ccle_meta.u2
-
-                }
-                #user chooses Primary or ccle_metastasis
-                if (cond == 4) {
-
-                    ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,primary_or_ccle_metastasis)
-                    colnames(ccle_meta.u2) <- c("SampleName","Condition")
-                    ccle_meta_sub <- ccle_meta.u2
-
-                }
-
+            else if (secondChoice != "All_Sub_Lineages"){
+                ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),]
             }
-
-            meta( as.data.frame(ccle_meta_sub));
-            meta = meta();
-	    metagroups <- as.vector(levels(factor(meta[,2])))
-
-	    if (length(metagroups) == 2) {
-		    boxopt <- c("wilcox.test", "t.test", "none")
-	    }
-	    if (length(metagroups) >= 3) {
-		    boxopt <- c("kruskal.test", "anova", "none")
-	    }
-
-            updateSelectInput(session, "boxplotcompare", "Boxplot Stat Compare Method:", choices = boxopt)
-
-	    
-	    updateSelectInput(session, "comparisonA2", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
-	    updateSelectInput(session, "comparisonA2.path", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
-	    updateSelectInput(session, "comparisonA2.DEG", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
-	    updateSelectInput(session, "comparisonA", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
-	    updateSelectInput(session, "comparisonB2", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
-	    updateSelectInput(session, "comparisonB2.path", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
-	    updateSelectInput(session, "comparisonB2.DEG", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
-	    updateSelectInput(session, "comparisonB", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
-
-
-
-
-	    ### update EXPR section
-            firstChoice <- input$firstChoice
-            secondChoice <- input$secondChoice
-
-            if (firstChoice %in% ccle_disease_choice) {
-
-                samples <- unlist(ccle_meta[which(ccle_meta$primary_disease == firstChoice),1], use.names = F)
-                ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
-                ccle_expr_sub$gene <- rownames(ccle_expr_sub)
-                ccle_expr_sub <- ccle_expr_sub %>%
-                    relocate(gene)
+            #assign condition variable to subset sample type
+            cond <- input$condseleccheck
+            
+            #user chooses gene of interest
+            if (cond == 5){
+                
+                if (input$geneselection != ccle_geneList[1]) {
+                    gene <- input$geneselection
+                    #assign NULL in case column not found
+                    genecold <- NULL
+                    genecolo <- NULL
+                    genecold <- paste(gene,"_damagingVariant",sep = "")
+                    genecolo <- paste(gene,"_otherVariant",sep = "")
+                    ccle_meta_sub <- ccle_meta.u[,c("SampleName",genecold,genecolo)]
+                    ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
+                    ccle_meta_sub2 <- ccle_meta_sub %>%
+                        mutate(Condition = case_when(
+                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "FALSE" ~ paste("WT_",gene,sep = ""),
+                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "TRUE" ~ paste("NonDamagingVariant_",gene,sep = ""),
+                            ccle_meta_sub[,2] == "TRUE" & ccle_meta_sub[,3] == "FALSE" ~ paste("DamagingVariant_",gene,sep = "")
+                        ))
+                    #}
+                    ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
+                    colnames(ccle_meta_sub3)[1] <- "SampleName"
+                    ccle_meta_sub <- ccle_meta_sub3
+                }
+                
             }
-            if (firstChoice %in% ccle_lineage_choice) {
-
-                if (secondChoice == "All_Sub_Lineages"){
-                    samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice),1], use.names = F)
-                }
-                else if (secondChoice != "All_Sub_Lineages"){
-                    samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),1], use.names = F)
-                }
-                ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
-                ccle_expr_sub$gene <- rownames(ccle_expr_sub)
-                ccle_expr_sub <- ccle_expr_sub %>%
-                    relocate(gene)
+            
+            #user chooses sex condition
+            if (cond == 1) {
+                
+                ccle_meta.u2 <- ccle_meta.u %>%
+                    select(SampleName,sex)
+                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+                ccle_meta_sub <- ccle_meta.u2
+                
             }
-
-
-            expr <- ccle_expr_sub %>%
-                drop_na()
-                row.names(expr) <- make.names(expr[,1], unique = T)
-
-            expr <- expr[,-1]
-                colnames(expr) <- gsub("[_.-]", ".", colnames(expr))
-                # gene list file from expression data
-                Gene <- rownames(expr)
-                geneList <- as.data.frame(Gene)
-            geneList(geneList)
-
-
-                #meta
-                #meta <- read.delim(meta_file, sep = '\t', header = header, strip.white = T)
-            meta <- meta();
-                meta[,1] <- gsub("[_.-]", ".", meta[,1])
-                colnames(meta) <- c("SampleName","Group")
-                metagroups <- as.vector(levels(factor(meta[,2])))
-
-                #boxplot choices based on meta groups
-                if (length(metagroups) == 2) {
-                    boxopt <- c("wilcox.test", "t.test", "none")
+            #option number 2 is not used
+            #if user chooses sample selection site
+            if (cond == 3) {
+                
+                ccle_meta.u2 <- ccle_meta.u %>%
+                    select(SampleName,sample_collection_site)
+                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+                ccle_meta_sub <- ccle_meta.u2
+                
+            }
+            #user chooses Primary or ccle_metastasis
+            if (cond == 4) {
+                
+                ccle_meta.u2 <- ccle_meta.u %>%
+                    select(SampleName,primary_or_metastasis)
+                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+                ccle_meta_sub <- ccle_meta.u2
+                
+            }
+            
+        }
+        #if the user chooses to subset by disease type
+        if (firstChoice %in% ccle_disease_choice) {
+            
+            #Subset meta based on disease type
+            ccle_meta.u <- ccle_meta[which(ccle_meta$primary_disease == firstChoice),]
+            #assign condition varaible
+            cond <- input$condseleccheck
+            
+            #if user chooses gene of interest
+            if (cond == 5) {
+                
+                if (input$geneselection != ccle_geneList[1]) {
+                    gene <- input$geneselection
+                    #assign NULL in case column not found
+                    genecold <- NULL
+                    genecolo <- NULL
+                    genecold <- paste(gene,"_damagingVariant",sep = "")
+                    genecolo <- paste(gene,"_otherVariant",sep = "")
+                    ccle_meta_sub <- ccle_meta.u[,c("SampleName",genecold,genecolo)]
+                    ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
+                    ccle_meta_sub2 <- ccle_meta_sub %>%
+                        mutate(Condition = case_when(
+                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "FALSE" ~ paste("WT_",gene,sep = ""),
+                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "TRUE" ~ paste("NonDamagingVariant_",gene,sep = ""),
+                            ccle_meta_sub[,2] == "TRUE" & ccle_meta_sub[,3] == "FALSE" ~ paste("DamagingVariant_",gene,sep = "")
+                        ))
+                    #}
+                    ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
+                    colnames(ccle_meta_sub3)[1] <- "SampleName"
+                    ccle_meta_sub <- ccle_meta_sub3
+                    
                 }
-                if (length(metagroups) >= 3) {
-                    boxopt <- c("kruskal.test", "anova", "none")
-                }
-
-                #for heatmap sample selection
-                sampsames <- intersect(colnames(expr),meta[,1])
-                #ensure expression samples and meta are exact
-                expr <- expr[,sampsames]
-                meta = meta[which(meta[,1] %in% sampsames),]
-            updated_expr(ccle_expr_sub[,-1]);
-
-            meta(meta);
-
-            updateSelectInput(session, "scatterG1","Select Gene 1", choices = Gene)
-            updateSelectInput(session, "scatterG2","Select Gene 2", choices = Gene, selected = Gene[2])
-	    
+            }
+            #user chooses sex condition
+            if (cond == 1) {
+                
+                ccle_meta.u2 <- ccle_meta.u %>%
+                    select(SampleName,sex)
+                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+                ccle_meta_sub <- ccle_meta.u2
+                
+            }
+            #Option number 2 is not available
+            #User chooses to sort by sample collection site
+            if (cond == 3) {
+                
+                ccle_meta.u2 <- ccle_meta.u %>%
+                    select(SampleName,sample_collection_site)
+                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+                ccle_meta_sub <- ccle_meta.u2
+                
+            }
+            #user chooses Primary or ccle_metastasis
+            if (cond == 4) {
+                
+                ccle_meta.u2 <- ccle_meta.u %>%
+                    select(SampleName,primary_or_metastasis)
+                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+                ccle_meta_sub <- ccle_meta.u2
+                
+            }
+            
+        }
+        
+        #replace meta variable with new subset meta
+        meta(as.data.frame(ccle_meta_sub))
+        #assign the new meta to a variable
+        meta = meta()
+        #determine number of levels in meta sample type to provide specific options to the user
+        metagroups <- as.vector(levels(factor(meta[,2])))
+        #backend to determine type of stat compare method for box plot
+        if (length(metagroups) == 2) {
+            boxopt <- c("wilcox.test", "t.test", "none")
+        }
+        if (length(metagroups) >= 3) {
+            boxopt <- c("kruskal.test", "anova", "none")
+        }
+        
+        #update all user selections in app based on new data
+        updateSelectInput(session, "boxplotcompare", "Boxplot Stat Compare Method:", choices = boxopt)
+        updateSelectInput(session, "comparisonA2", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
+        updateSelectInput(session, "comparisonA2.path", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
+        updateSelectInput(session, "comparisonA2.DEG", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
+        updateSelectInput(session, "comparisonA", "Comparison: GroupA", choices = metagroups, selected = metagroups[1])
+        updateSelectInput(session, "comparisonB2", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
+        updateSelectInput(session, "comparisonB2.path", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
+        updateSelectInput(session, "comparisonB2.DEG", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
+        updateSelectInput(session, "comparisonB", "Comparison: GroupB", choices = metagroups, selected = metagroups[2])
+        
+        
+        ##--update EXPR section--##
+        #assign user lineage/disease choices
+        firstChoice <- input$firstChoice
+        secondChoice <- input$secondChoice
+        
+        #if user chooses disease -> subset expression based on the samples with that disease
+        if (firstChoice %in% ccle_disease_choice) {
+            
+            samples <- unlist(ccle_meta[which(ccle_meta$primary_disease == firstChoice),1], use.names = F)
+            ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
+            ccle_expr_sub$gene <- rownames(ccle_expr_sub)
+            ccle_expr_sub <- ccle_expr_sub %>%
+                relocate(gene)
+        }
+        #if user chooses lineage -> choose sub-lineage and subset with those options
+        if (firstChoice %in% ccle_lineage_choice) {
+            
+            if (secondChoice == "All_Sub_Lineages"){
+                samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice),1], use.names = F)
+            }
+            else if (secondChoice != "All_Sub_Lineages"){
+                samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),1], use.names = F)
+            }
+            ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
+            ccle_expr_sub$gene <- rownames(ccle_expr_sub)
+            ccle_expr_sub <- ccle_expr_sub %>%
+                relocate(gene)
+        }
+        
+        #drop any rows with NA from the new subset data
+        expr <- ccle_expr_sub %>%
+            drop_na()
+        #Assign the gene names to be row names, make unique if duplicates
+        row.names(expr) <- make.names(expr[,1], unique = T)
+        #remove first column of gene names
+        expr <- expr[,-1]
+        #make special characters uniform to .
+        colnames(expr) <- gsub("[_.-]", ".", colnames(expr))
+        # gene list file from expression data
+        Gene <- rownames(expr)
+        geneList <- as.data.frame(Gene)
+        #update gene list reactive value with genes from the subset data
+        geneList(geneList)
+        
+        
+        #meta
+        #meta <- read.delim(meta_file, sep = '\t', header = header, strip.white = T)
+        meta <- meta();
+        meta[,1] <- gsub("[_.-]", ".", meta[,1])
+        colnames(meta) <- c("SampleName","Group")
+        metagroups <- as.vector(levels(factor(meta[,2])))
+        
+        #boxplot choices based on meta groups
+        if (length(metagroups) == 2) {
+            boxopt <- c("wilcox.test", "t.test", "none")
+        }
+        if (length(metagroups) >= 3) {
+            boxopt <- c("kruskal.test", "anova", "none")
+        }
+        
+        #for heatmap sample selection
+        sampsames <- intersect(colnames(expr),meta[,1])
+        #ensure expression samples and meta are exact
+        expr <- expr[,sampsames]
+        meta = meta[which(meta[,1] %in% sampsames),]
+        #update expression and meta reactive values ensure both have the same samples
+        #updated_expr(ccle_expr_sub[,-1])
+        updated_expr(expr)
+        meta(meta)
+        
+        #update gene selection based on genes available
+        updateSelectInput(session, "scatterG1","Select Gene 1", choices = Gene)
+        updateSelectInput(session, "scatterG2","Select Gene 2", choices = Gene, selected = Gene[2])
+        updateSelectInput(session, "heatmapGeneSelec","Gene Selection:",
+                    choices = sort(as.vector(geneList[,1])),
+                    selected = CTKgenes)
+        updateSelectInput(session, "userheatsamp2", "Samples Selection:",
+                    choices = sampsames, selected = sampsames)
+        
     })
     output$testexprtable <- DT::renderDataTable({
-	expr = updated_expr();
+        expr = updated_expr();
         DT::datatable(expr,
-                      selection = list(mode = 'single', selected = 1),
-                      options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100")))
-
+                      options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T))
+        
     })
     output$testtable <- DT::renderDataTable({
         DT::datatable(meta(),
-                      selection = list(mode = 'single', selected = 1),
-                      options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100")))
-
+                      rownames = F,
+                      options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T))
+        
     })
- 
-
-    output$downloadMETA <- downloadHandler(
+    
+    #output$CellLineMapHeader <- renderUI({
+    #    #req(input$updateMETA)
+    #    h4("Cell Line Name Guide")
+    #})
+    
+    output$CellLineNames <- DT::renderDataTable(({
+        #req(input$updateMETA)
+        namemap <- ccle_namemap
+        meta.new <- meta()
+        samp_selected <- unlist(meta.new[,1])
+        namemap_selcted <- namemap[which(namemap$SampleName %in% samp_selected),]
+        DT::datatable(namemap_selcted,
+                      rownames = F,
+                      options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T))
+        
+        
+    }))
+    
+    output$downloadNameMapbutton <- renderUI({
+        req(input$updateMETA)
+        downloadButton("downloadNameMap","Download Cell Line Name Map")
+    })
+    
+    output$downloadNameMap <- downloadHandler(
         filename = function() {
-            paste(input$ccle_metaFileName,".tsv", sep = '')
+            meta.cond <- meta()
+            conditions <- c("Sex","SampleSource","SampleCollectionSite","PrimaryOrMetastasis","GeneVariant")
+            cond.n <- as.numeric(input$condseleccheck)
+            firstChoice <- input$firstChoice
+            #secondChoice <- input$secondChoice
+            if (firstChoice %in% ccle_disease_choice) {
+                paste("CLNameMap_",gsub(" ","",firstChoice),"_",as.character(conditions[cond.n]),".tsv", sep = '')
+            }
+            else if (firstChoice %in% ccle_lineage_choice) {
+                
+                secondChoice <- input$secondChoice
+                
+                if (secondChoice == "All_Sub_Lineages"){
+                    paste("CLNameMap_",firstChoice,"_All_Sub_Lineages_",as.character(conditions[cond.n]),".tsv", sep = '')
+                }
+                else if (secondChoice != "All_Sub_Lineages_"){
+                    paste("CLNameMap_",firstChoice,"_",secondChoice,as.character(conditions[cond.n]),".tsv", sep = '')
+                }
+            }
         },
         content = function(file) {
-
+            namemap <- ccle_namemap
+            meta.new <- meta()
+            samp_selected <- unlist(meta.new[,1])
+            namemap_selcted <- namemap[which(namemap$SampleName %in% samp_selected),]
+            write_tsv(namemap_selcted,file)
+            
+        }
+    )
+    
+    output$downloadMETAbutton <- renderUI({
+        req(input$updateMETA)
+        downloadButton("downloadMETA","Download Meta Data")
+    })
+    
+    output$downloadEXPRbutton <- renderUI({
+        req(input$updateMETA)
+        downloadButton("downloadEXPR","Download Expression Data")
+    })
+    
+    
+    output$downloadMETA <- downloadHandler(
+        filename = function() {
+            meta.cond <- meta()
+            conditions <- c("Sex","SampleSource","SampleCollectionSite","PrimaryOrMetastasis","GeneVariant")
+            cond.n <- as.numeric(input$condseleccheck)
             firstChoice <- input$firstChoice
-            secondChoice <- input$secondChoice
+            #secondChoice <- input$secondChoice
+            if (firstChoice %in% ccle_disease_choice) {
+                paste("meta_",gsub(" ","",firstChoice),"_",as.character(conditions[cond.n]),".tsv", sep = '')
+            }
+            else if (firstChoice %in% ccle_lineage_choice) {
+                secondChoice <- input$secondChoice
+                
+                if (secondChoice == "All_Sub_Lineages"){
+                    paste("meta_",firstChoice,"_All_Sub_Lineages_",as.character(conditions[cond.n]),".tsv", sep = '')
+                }
+                else if (secondChoice != "All_Sub_Lineages_"){
+                    paste("meta_",firstChoice,"_",secondChoice,as.character(conditions[cond.n]),".tsv", sep = '')
+                }
+            }
+        },
+        content = function(file) {
+            
+            firstChoice <- input$firstChoice
+            #secondChoice <- input$secondChoice
             if (firstChoice %in% ccle_lineage_choice) {
-
+                secondChoice <- input$secondChoice
+                
                 #subset ccle_meta based on lineage
                 if (secondChoice == "All_Sub_Lineages"){
                     ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice),]
@@ -617,12 +729,12 @@ server <- function(input, output, session) {
                 else if (secondChoice != "All_Sub_Lineages"){
                     ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),]
                 }
-
+                
                 cond <- input$condseleccheck
-
+                
                 #user chooses gene of interest
                 if (cond == 5){
-
+                    
                     if (input$geneselection != ccle_geneList[1]) {
                         gene <- input$geneselection
                         #assign NULL in case column not found
@@ -630,7 +742,7 @@ server <- function(input, output, session) {
                         genecolo <- NULL
                         genecold <- paste(gene,"_damagingVariant",sep = "")
                         genecolo <- paste(gene,"_otherVariant",sep = "")
-                        ccle_meta_sub <- ccle_meta.u[,c("DepMap_ID",genecold,genecolo)]
+                        ccle_meta_sub <- ccle_meta.u[,c("SampleName",genecold,genecolo)]
                         ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
                         #rename 
                         #if (ncol(ccle_meta_sub) == 3) {
@@ -645,46 +757,46 @@ server <- function(input, output, session) {
                         colnames(ccle_meta_sub3)[1] <- "SampleName"
                         ccle_meta_sub <- ccle_meta_sub3
                     }
-
+                    
                 }
-
+                
                 #user chooses sex condition
-                if (cond == 1) {
-
+                else if (cond == 1) {
+                    
                     ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sex)
+                        select(SampleName,sex)
                     colnames(ccle_meta.u2) <- c("SampleName","Condition")
                     ccle_meta_sub <- ccle_meta.u2
-
+                    
                 }
-                if (cond == 3) {
-
+                else if (cond == 3) {
+                    
                     ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sample_collection_site)
+                        select(SampleName,sample_collection_site)
                     colnames(ccle_meta.u2) <- c("SampleName","Condition")
                     ccle_meta_sub <- ccle_meta.u2
-
+                    
                 }
                 #user chooses Primary or ccle_metastasis
-                if (cond == 4) {
-
+                else if (cond == 4) {
+                    
                     ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,primary_or_ccle_metastasis)
+                        select(SampleName,primary_or_metastasis)
                     colnames(ccle_meta.u2) <- c("SampleName","Condition")
                     ccle_meta_sub <- ccle_meta.u2
-
+                    
                 }
-
+                
             }
-
-            if (firstChoice %in% ccle_disease_choice) {
-
+            
+            else if (firstChoice %in% ccle_disease_choice) {
+                
                 ccle_meta.u <- ccle_meta[which(ccle_meta$primary_disease == firstChoice),]
                 cond <- input$condseleccheck
-
+                
                 #if user chooses gene of interest
                 if (cond == 5) {
-
+                    
                     if (input$geneselection != ccle_geneList[1]) {
                         gene <- input$geneselection
                         #assign NULL in case column not found
@@ -692,7 +804,7 @@ server <- function(input, output, session) {
                         genecolo <- NULL
                         genecold <- paste(gene,"_damagingVariant",sep = "")
                         genecolo <- paste(gene,"_otherVariant",sep = "")
-                        ccle_meta_sub <- ccle_meta.u[,c("DepMap_ID",genecold,genecolo)]
+                        ccle_meta_sub <- ccle_meta.u[,c("SampleName",genecold,genecolo)]
                         ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
                         #rename 
                         #if (ncol(ccle_meta_sub) == 3) {
@@ -706,61 +818,97 @@ server <- function(input, output, session) {
                         ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
                         colnames(ccle_meta_sub3)[1] <- "SampleName"
                         ccle_meta_sub <- ccle_meta_sub3
-
+                        
                     }
                 }
                 #user chooses sex condition
-                if (cond == 1) {
-
+                else if (cond == 1) {
+                    
                     ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sex)
+                        select(SampleName,sex)
                     colnames(ccle_meta.u2) <- c("SampleName","Condition")
                     ccle_meta_sub <- ccle_meta.u2
-
+                    
                 }
-                if (cond == 3) {
-
+                else if (cond == 3) {
+                    
                     ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,sample_collection_site)
+                        select(SampleName,sample_collection_site)
                     colnames(ccle_meta.u2) <- c("SampleName","Condition")
                     ccle_meta_sub <- ccle_meta.u2
-
+                    
                 }
                 #user chooses Primary or ccle_metastasis
-                if (cond == 4) {
-
+                else if (cond == 4) {
+                    
                     ccle_meta.u2 <- ccle_meta.u %>%
-                        select(DepMap_ID,primary_or_ccle_metastasis)
+                        select(SampleName,primary_or_metastasis)
                     colnames(ccle_meta.u2) <- c("SampleName","Condition")
                     ccle_meta_sub <- ccle_meta.u2
-
+                    
                 }
-
+                
             }
-	    meta <- ccle_meta_sub
+            meta <- ccle_meta_sub
             write_tsv(ccle_meta_sub,file)
         }
     )
-
+    
     output$downloadEXPR <- downloadHandler(
         filename = function() {
-            paste(input$ccle_exprFileName,".tsv", sep = '')
+            
+            meta.cond <- meta()
+            conditions <- c("Sex","SampleSource","SampleCollectionSite","PrimaryOrMetastasis","GeneVariant")
+            cond.n <- as.numeric(input$condseleccheck)
+            firstChoice <- input$firstChoice
+            #secondChoice <- input$secondChoice
+            if (firstChoice %in% ccle_disease_choice) {
+                paste("expr_",gsub(" ","",firstChoice),"_",as.character(conditions[cond.n]),".tsv", sep = '')
+            }
+            else if (firstChoice %in% ccle_lineage_choice) {
+                secondChoice <- input$secondChoice
+                
+                if (secondChoice == "All_Sub_Lineages"){
+                    paste("expr_",firstChoice,"_All_Sub_Lineages_",as.character(conditions[cond.n]),".tsv", sep = '')
+                }
+                else if (secondChoice != "All_Sub_Lineages_"){
+                    paste("expr_",firstChoice,"_",secondChoice,as.character(conditions[cond.n]),".tsv", sep = '')
+                }
+            }
+            
+            #meta.cond <- meta()
+            #condition <- colnames(meta.cond)[2]
+            #firstChoice <- input$firstChoice
+            #secondChoice <- input$secondChoice
+            #if (firstChoice %in% ccle_disease_choice) {
+            #  paste("expr_",firstChoice,"_",condition,".tsv", sep = '')
+            #}
+            #if (firstChoice %in% ccle_lineage_choice) {
+            #  
+            #  if (secondChoice == "All_Sub_Lineages"){
+            #    paste("expr_",firstChoice,"_All_Sub_Lineages_",condition,".tsv", sep = '')
+            #  }
+            #  else if (secondChoice != "All_Sub_Lineages_"){
+            #    paste("expr_",firstChoice,"_",secondChoice,condition,".tsv", sep = '')
+            #  }
+            #}
         },
         content = function(file) {
-
+            
             firstChoice <- input$firstChoice
-            secondChoice <- input$secondChoice
-
+            #secondChoice <- input$secondChoice
+            
             if (firstChoice %in% ccle_disease_choice) {
-
+                
                 samples <- unlist(ccle_meta[which(ccle_meta$primary_disease == firstChoice),1], use.names = F)
                 ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
                 ccle_expr_sub$gene <- rownames(ccle_expr_sub)
                 ccle_expr_sub <- ccle_expr_sub %>%
                     relocate(gene)
             }
-            if (firstChoice %in% ccle_lineage_choice) {
-
+            else if (firstChoice %in% ccle_lineage_choice) {
+                secondChoice <- input$secondChoice
+                
                 if (secondChoice == "All_Sub_Lineages"){
                     samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice),1], use.names = F)
                 }
@@ -773,15 +921,193 @@ server <- function(input, output, session) {
                     relocate(gene)
             }
             write_tsv(ccle_expr_sub,file)
-
+            
         }
     )
-
-
+    
+    
+    #output$downloadMETA <- downloadHandler(
+    #    filename = function() {
+    #        paste(input$ccle_metaFileName,".tsv", sep = '')
+    #    },
+    #    content = function(file) {
+    #        
+    #        firstChoice <- input$firstChoice
+    #        secondChoice <- input$secondChoice
+    #        if (firstChoice %in% ccle_lineage_choice) {
+    #            
+    #            #subset ccle_meta based on lineage
+    #            if (secondChoice == "All_Sub_Lineages"){
+    #                ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice),]
+    #            }
+    #            else if (secondChoice != "All_Sub_Lineages"){
+    #                ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),]
+    #            }
+    #            
+    #            cond <- input$condseleccheck
+    #            
+    #            #user chooses gene of interest
+    #            if (cond == 5){
+    #                
+    #                if (input$geneselection != ccle_geneList[1]) {
+    #                    gene <- input$geneselection
+    #                    #assign NULL in case column not found
+    #                    genecold <- NULL
+    #                    genecolo <- NULL
+    #                    genecold <- paste(gene,"_damagingVariant",sep = "")
+    #                    genecolo <- paste(gene,"_otherVariant",sep = "")
+    #                    ccle_meta_sub <- ccle_meta.u[,c("SampleName",genecold,genecolo)]
+    #                    ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
+    #                    #rename 
+    #                    #if (ncol(ccle_meta_sub) == 3) {
+    #                    ccle_meta_sub2 <- ccle_meta_sub %>%
+    #                        mutate(Condition = case_when(
+    #                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "FALSE" ~ "WT",
+    #                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "TRUE" ~ "NonDamagingVariant",
+    #                            ccle_meta_sub[,2] == "TRUE" & ccle_meta_sub[,3] == "FALSE" ~ "DamagingVariant"
+    #                        ))
+    #                    #}
+    #                    ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
+    #                    colnames(ccle_meta_sub3)[1] <- "SampleName"
+    #                    ccle_meta_sub <- ccle_meta_sub3
+    #                }
+    #                
+    #            }
+    #            
+    #            #user chooses sex condition
+    #            if (cond == 1) {
+    #                
+    #                ccle_meta.u2 <- ccle_meta.u %>%
+    #                    select(SampleName,sex)
+    #                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+    #                ccle_meta_sub <- ccle_meta.u2
+    #                
+    #            }
+    #            if (cond == 3) {
+    #                
+    #                ccle_meta.u2 <- ccle_meta.u %>%
+    #                    select(SampleName,sample_collection_site)
+    #                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+    #                ccle_meta_sub <- ccle_meta.u2
+    #                
+    #            }
+    #            #user chooses Primary or ccle_metastasis
+    #            if (cond == 4) {
+    #                
+    #                ccle_meta.u2 <- ccle_meta.u %>%
+    #                    select(SampleName,primary_or_metastasis)
+    #                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+    #                ccle_meta_sub <- ccle_meta.u2
+    #                
+    #            }
+    #            
+    #        }
+    #        
+    #        if (firstChoice %in% ccle_disease_choice) {
+    #            
+    #            ccle_meta.u <- ccle_meta[which(ccle_meta$primary_disease == firstChoice),]
+    #            cond <- input$condseleccheck
+    #            
+    #            #if user chooses gene of interest
+    #            if (cond == 5) {
+    #                
+    #                if (input$geneselection != ccle_geneList[1]) {
+    #                    gene <- input$geneselection
+    #                    #assign NULL in case column not found
+    #                    genecold <- NULL
+    #                    genecolo <- NULL
+    #                    genecold <- paste(gene,"_damagingVariant",sep = "")
+    #                    genecolo <- paste(gene,"_otherVariant",sep = "")
+    #                    ccle_meta_sub <- ccle_meta.u[,c("SampleName",genecold,genecolo)]
+    #                    ccle_meta_sub[,c(2,3)] <- lapply(ccle_meta_sub[,c(2,3)],as.character)
+    #                    #rename 
+    #                    #if (ncol(ccle_meta_sub) == 3) {
+    #                    ccle_meta_sub2 <- ccle_meta_sub %>%
+    #                        mutate(Condition = case_when(
+    #                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "FALSE" ~ "WT",
+    #                            ccle_meta_sub[,2] == "FALSE" & ccle_meta_sub[,3] == "TRUE" ~ "NonDamagingVariant",
+    #                            ccle_meta_sub[,2] == "TRUE" & ccle_meta_sub[,3] == "FALSE" ~ "DamagingVariant"
+    #                        ))
+    #                    #}
+    #                    ccle_meta_sub3 <- ccle_meta_sub2[,c(1,4)]
+    #                    colnames(ccle_meta_sub3)[1] <- "SampleName"
+    #                    ccle_meta_sub <- ccle_meta_sub3
+    #                    
+    #                }
+    #            }
+    #            #user chooses sex condition
+    #            if (cond == 1) {
+    #                
+    #                ccle_meta.u2 <- ccle_meta.u %>%
+    #                    select(SampleName,sex)
+    #                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+    #                ccle_meta_sub <- ccle_meta.u2
+    #                
+    #            }
+    #            if (cond == 3) {
+    #                
+    #                ccle_meta.u2 <- ccle_meta.u %>%
+    #                    select(SampleName,sample_collection_site)
+    #                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+    #                ccle_meta_sub <- ccle_meta.u2
+    #                
+    #            }
+    #            #user chooses Primary or ccle_metastasis
+    #            if (cond == 4) {
+    #                
+    #                ccle_meta.u2 <- ccle_meta.u %>%
+    #                    select(SampleName,primary_or_metastasis)
+    #                colnames(ccle_meta.u2) <- c("SampleName","Condition")
+    #                ccle_meta_sub <- ccle_meta.u2
+    #                
+    #            }
+    #            
+    #        }
+    #        meta <- ccle_meta_sub
+    #        write_tsv(ccle_meta_sub,file)
+    #    }
+    #)
+    #
+    #output$downloadEXPR <- downloadHandler(
+    #    filename = function() {
+    #        paste(input$ccle_exprFileName,".tsv", sep = '')
+    #    },
+    #    content = function(file) {
+    #        
+    #        firstChoice <- input$firstChoice
+    #        secondChoice <- input$secondChoice
+    #        
+    #        if (firstChoice %in% ccle_disease_choice) {
+    #            
+    #            samples <- unlist(ccle_meta[which(ccle_meta$primary_disease == firstChoice),1], use.names = F)
+    #            ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
+    #            ccle_expr_sub$gene <- rownames(ccle_expr_sub)
+    #            ccle_expr_sub <- ccle_expr_sub %>%
+    #                relocate(gene)
+    #        }
+    #        if (firstChoice %in% ccle_lineage_choice) {
+    #            
+    #            if (secondChoice == "All_Sub_Lineages"){
+    #                samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice),1], use.names = F)
+    #            }
+    #            else if (secondChoice != "All_Sub_Lineages"){
+    #                samples <- unlist(ccle_meta[which(ccle_meta$lineage == firstChoice & ccle_meta$lineage_subtype == secondChoice),1], use.names = F)
+    #            }
+    #            ccle_expr_sub <- ccle_expr[,which(colnames(ccle_expr) %in% samples), drop = F]
+    #            ccle_expr_sub$gene <- rownames(ccle_expr_sub)
+    #            ccle_expr_sub <- ccle_expr_sub %>%
+    #                relocate(gene)
+    #        }
+    #        write_tsv(ccle_expr_sub,file)
+    #        
+    #    }
+    #)
+    
+    
     output$sublinselec <- renderUI({
-
+        
         if (input$linordischeck == 1) {
-
+            
             firstChoice <- input$firstChoice
             ccle_meta.u <- ccle_meta[which(ccle_meta$lineage == firstChoice),]
             subLin_choices <- "All_Sub_Lineages"
@@ -789,11 +1115,29 @@ server <- function(input, output, session) {
             selectInput("secondChoice","Select Sub-Lineage:",
                         choices = subLin_choices)
         }
-
+        
     })
-
+    
     
     ####----Render UI----####
+    
+    ##render flow chart
+    #output$flowchartimage <- renderImage({
+    #    # A temp file to save the output.
+    #    # This file will be removed later by renderImage
+    #    outfile <- tempfile(fileext = '.png')
+    #    
+    #    # Generate the PNG
+    #    png(flowchart_file, width = 600, height = 400)
+    #    dev.off()
+    #    
+    #    # Return a list containing the filename
+    #    list(src = flowchart_file,
+    #         contentType = 'image/png',
+    #         width = 400,
+    #         height = 300,
+    #         alt = "This is alternate text")
+    #}, deleteFile = TRUE)
     
     
     #render user gmt data upload if indicated
@@ -877,10 +1221,10 @@ server <- function(input, output, session) {
     
     #reactive for ssGSEA function
     ssGSEAfunc <- reactive({
-	expr = updated_expr()
-	meta = meta()
-	A = as.matrix(expr)
-
+        expr = updated_expr()
+        meta = meta()
+        A = as.matrix(expr)
+        
         if (input$tables == 1) {
             GS <- gs[(msigdb.gsea2[input$msigdbTable_rows_selected,3])]
         }
@@ -917,10 +1261,10 @@ server <- function(input, output, session) {
     
     #perform sig2noise calculation and create GSEA result from user chosen gene set
     datasetInput <- reactive({
-	expr = updated_expr();
-	A <- as.matrix(expr)
-	meta = as.matrix(meta());
-
+        expr = updated_expr();
+        A <- as.matrix(expr)
+        meta = as.matrix(meta());
+        
         #groupA <- meta[,1][meta[,2] == input$comparisonA]
         groupA <- meta[which(meta[,2] == input$comparisonA),1]
         #groupB <- meta[,1][meta[,2] == input$comparisonB]
@@ -979,13 +1323,13 @@ server <- function(input, output, session) {
     
     #top genes data frame reactive
     topgenereact <- reactive({
-	meta = as.matrix(meta())
-	expr = as.matrix(updated_expr())
-
+        meta = as.matrix(meta())
+        expr = as.matrix(updated_expr())
+        
         #make group based on user input
-	A <- meta[which(meta[,2] == input$comparisonA2),1]
-	B <- meta[which(meta[,2] == input$comparisonB2),1]
-
+        A <- meta[which(meta[,2] == input$comparisonA2),1]
+        B <- meta[which(meta[,2] == input$comparisonB2),1]
+        
         #A <- meta[,1][meta[,2] == input$comparisonA2]
         #B <- meta[,1][meta[,2] == input$comparisonB2]
         #make top table
@@ -1098,135 +1442,135 @@ server <- function(input, output, session) {
         }
     })
     
-    #render pre-loaded enriched signatures table
-    output$enrich_sig_table <- DT::renderDataTable({
-        gsea.df <- as_tibble(get(ES_Tab_List[which(ES_Tab_List == paste("ES_table",match(input$SigTableChoice, SigNames),sep = ""))]))
-        DT::datatable(gsea.df,
-                      extensions = c("KeyTable", "FixedHeader"),
-                      caption = "Enriched Signatures",
-                      options = list(keys = T, searchHighlight = T, pageLength = 10, lengthMenu = c("10", "25", "50", "100"),scrollX = T)) %>%
-            formatRound(columns = c(2:10), digits = 2)
-    })
+    ##render pre-loaded enriched signatures table
+    #output$enrich_sig_table <- DT::renderDataTable({
+    #    gsea.df <- as_tibble(get(ES_Tab_List[which(ES_Tab_List == paste("ES_table",match(input$SigTableChoice, SigNames),sep = ""))]))
+    #    DT::datatable(gsea.df,
+    #                  extensions = c("KeyTable", "FixedHeader"),
+    #                  caption = "Enriched Signatures",
+    #                  options = list(keys = T, searchHighlight = T, pageLength = 10, lengthMenu = c("10", "25", "50", "100"),scrollX = T)) %>%
+    #        formatRound(columns = c(2:10), digits = 2)
+    #})
     
-    #render user generated enriched signature table based off other gmt
-    output$enrich_sig_table_gen <- DT::renderDataTable({
-	expr = updated_expr()
-	meta = meta()
-	A = as.matrix(expr)
-
-        if (input$tables == 3) {
-            #groupA <- meta[,1][meta[,2] == input$comparisonA]
-            #groupB <- meta[,1][meta[,2] == input$comparisonB]
-            groupA <- meta[which(meta[,2] == input$comparisonA),1]
-            groupB <- meta[which(meta[,2] == input$comparisonB),1]	    
-            ##----Signal-to-Noise Calculation----##
-            A <- A + 0.00000001
-            P = as.matrix(as.numeric(colnames(A) %in% groupA))
-            n1 <- sum(P[,1])
-            M1 <- A %*% P
-            M1 <- M1/n1
-            A2 <- A*A
-            S1 <- A2 %*% P
-            S1 <- S1/n1 - M1*M1 
-            S1 <- sqrt(abs((n1/(n1-1)) * S1))
-            P = as.matrix(as.numeric(colnames(A) %in% groupB))
-            n2 <- sum(P[,1])
-            M2 <- A %*% P
-            M2 <- M2/n2
-            A2 <- A*A
-            S2 <- A2 %*% P
-            S2 <- S2/n2 - M2*M2
-            S2 <- sqrt(abs((n2/(n2-1)) * S2))
-            rm(A2)
-            # small sigma "fix" as used in GeneCluster
-            S2 <- ifelse(0.2*abs(M2) < S2, S2, 0.2*abs(M2))
-            S2 <- ifelse(S2 == 0, 0.2, S2)
-            S1 <- ifelse(0.2*abs(M1) < S1, S1, 0.2*abs(M1))
-            S1 <- ifelse(S1 == 0, 0.2, S1)
-            M1 <- M1 - M2
-            rm(M2)
-            S1 <- S1 + S2
-            rm(S2)
-            s2n.matrix <- M1/S1
-            ##----Reformatting----##
-            s2n.df <- as.data.frame(s2n.matrix)
-            s2n.df$GeneID <- rownames(s2n.df)
-            rownames(s2n.df) <- NULL
-            data <- dplyr::select(s2n.df, GeneID, V1)
-            data.gsea <- data$V1
-            names(data.gsea) <- as.character(data$GeneID)
-            s2n.matrix.s <- sort(data.gsea, decreasing = T)
-            ##----GSEA----##
-            gmt.i <- tab2
-            gsea.res <- GSEA(s2n.matrix.s, TERM2GENE = gmt.i, verbose = F, pvalueCutoff = input$userPval)
-            gsea.df <- as_tibble(gsea.res@result)
-            ## displaying the GSEA results as interactive data table
-            DT::datatable(gsea.df,
-                          extensions = c("KeyTable", "FixedHeader"),
-                          caption = "Enriched Signatures",
-                          options = list(keys = T, searchHighlight = T, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T)) %>%
-                formatRound(columns = c(2:10), digits = 2)
-        }
-        else if (input$tables == 5) {
-            #groupA <- meta[,1][meta[,2] == input$comparisonA]
-            #groupB <- meta[,1][meta[,2] == input$comparisonB]
-            groupA <- meta[which(meta[,2] == input$comparisonA),1]
-            groupB <- meta[which(meta[,2] == input$comparisonB),1]	    
-            ##----Signal-to-Noise Calculation----##
-            A <- A + 0.00000001
-            P = as.matrix(as.numeric(colnames(A) %in% groupA))
-            n1 <- sum(P[,1])
-            M1 <- A %*% P
-            M1 <- M1/n1
-            A2 <- A*A
-            S1 <- A2 %*% P
-            S1 <- S1/n1 - M1*M1 
-            S1 <- sqrt(abs((n1/(n1-1)) * S1))
-            P = as.matrix(as.numeric(colnames(A) %in% groupB))
-            n2 <- sum(P[,1])
-            M2 <- A %*% P
-            M2 <- M2/n2
-            A2 <- A*A
-            S2 <- A2 %*% P
-            S2 <- S2/n2 - M2*M2
-            S2 <- sqrt(abs((n2/(n2-1)) * S2))
-            rm(A2)
-            # small sigma "fix" as used in GeneCluster
-            S2 <- ifelse(0.2*abs(M2) < S2, S2, 0.2*abs(M2))
-            S2 <- ifelse(S2 == 0, 0.2, S2)
-            S1 <- ifelse(0.2*abs(M1) < S1, S1, 0.2*abs(M1))
-            S1 <- ifelse(S1 == 0, 0.2, S1)
-            M1 <- M1 - M2
-            rm(M2)
-            S1 <- S1 + S2
-            rm(S2)
-            s2n.matrix <- M1/S1
-            ##----Reformatting----##
-            s2n.df <- as.data.frame(s2n.matrix)
-            s2n.df$GeneID <- rownames(s2n.df)
-            rownames(s2n.df) <- NULL
-            data <- dplyr::select(s2n.df, GeneID, V1)
-            data.gsea <- data$V1
-            names(data.gsea) <- as.character(data$GeneID)
-            s2n.matrix.s <- sort(data.gsea, decreasing = T)
-            ##----GSEA----##
-            gmt.i <- GStable.ubg()
-            gsea.res <- GSEA(s2n.matrix.s, TERM2GENE = gmt.i, verbose = F, pvalueCutoff = input$userPval)
-            gsea.df <- as_tibble(gsea.res@result)
-            ## displaying the GSEA results as interactive data table
-            DT::datatable(gsea.df,
-                          extensions = c("KeyTable", "FixedHeader"),
-                          caption = "Enriched Signatures",
-                          options = list(keys = T, searchHighlight = T, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T)) %>%
-                formatRound(columns = c(2:10), digits = 2)
-        }
-    })
+    ##render user generated enriched signature table based off other gmt
+    #output$enrich_sig_table_gen <- DT::renderDataTable({
+    #    expr = updated_expr()
+    #    meta = meta()
+    #    A = as.matrix(expr)
+    #    
+    #    if (input$tables == 3) {
+    #        #groupA <- meta[,1][meta[,2] == input$comparisonA]
+    #        #groupB <- meta[,1][meta[,2] == input$comparisonB]
+    #        groupA <- meta[which(meta[,2] == input$comparisonA),1]
+    #        groupB <- meta[which(meta[,2] == input$comparisonB),1]	    
+    #        ##----Signal-to-Noise Calculation----##
+    #        A <- A + 0.00000001
+    #        P = as.matrix(as.numeric(colnames(A) %in% groupA))
+    #        n1 <- sum(P[,1])
+    #        M1 <- A %*% P
+    #        M1 <- M1/n1
+    #        A2 <- A*A
+    #        S1 <- A2 %*% P
+    #        S1 <- S1/n1 - M1*M1 
+    #        S1 <- sqrt(abs((n1/(n1-1)) * S1))
+    #        P = as.matrix(as.numeric(colnames(A) %in% groupB))
+    #        n2 <- sum(P[,1])
+    #        M2 <- A %*% P
+    #        M2 <- M2/n2
+    #        A2 <- A*A
+    #        S2 <- A2 %*% P
+    #        S2 <- S2/n2 - M2*M2
+    #        S2 <- sqrt(abs((n2/(n2-1)) * S2))
+    #        rm(A2)
+    #        # small sigma "fix" as used in GeneCluster
+    #        S2 <- ifelse(0.2*abs(M2) < S2, S2, 0.2*abs(M2))
+    #        S2 <- ifelse(S2 == 0, 0.2, S2)
+    #        S1 <- ifelse(0.2*abs(M1) < S1, S1, 0.2*abs(M1))
+    #        S1 <- ifelse(S1 == 0, 0.2, S1)
+    #        M1 <- M1 - M2
+    #        rm(M2)
+    #        S1 <- S1 + S2
+    #        rm(S2)
+    #        s2n.matrix <- M1/S1
+    #        ##----Reformatting----##
+    #        s2n.df <- as.data.frame(s2n.matrix)
+    #        s2n.df$GeneID <- rownames(s2n.df)
+    #        rownames(s2n.df) <- NULL
+    #        data <- dplyr::select(s2n.df, GeneID, V1)
+    #        data.gsea <- data$V1
+    #        names(data.gsea) <- as.character(data$GeneID)
+    #        s2n.matrix.s <- sort(data.gsea, decreasing = T)
+    #        ##----GSEA----##
+    #        gmt.i <- tab2
+    #        gsea.res <- GSEA(s2n.matrix.s, TERM2GENE = gmt.i, verbose = F, pvalueCutoff = input$userPval)
+    #        gsea.df <- as_tibble(gsea.res@result)
+    #        ## displaying the GSEA results as interactive data table
+    #        DT::datatable(gsea.df,
+    #                      extensions = c("KeyTable", "FixedHeader"),
+    #                      caption = "Enriched Signatures",
+    #                      options = list(keys = T, searchHighlight = T, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T)) %>%
+    #            formatRound(columns = c(2:10), digits = 2)
+    #    }
+    #    else if (input$tables == 5) {
+    #        #groupA <- meta[,1][meta[,2] == input$comparisonA]
+    #        #groupB <- meta[,1][meta[,2] == input$comparisonB]
+    #        groupA <- meta[which(meta[,2] == input$comparisonA),1]
+    #        groupB <- meta[which(meta[,2] == input$comparisonB),1]	    
+    #        ##----Signal-to-Noise Calculation----##
+    #        A <- A + 0.00000001
+    #        P = as.matrix(as.numeric(colnames(A) %in% groupA))
+    #        n1 <- sum(P[,1])
+    #        M1 <- A %*% P
+    #        M1 <- M1/n1
+    #        A2 <- A*A
+    #        S1 <- A2 %*% P
+    #        S1 <- S1/n1 - M1*M1 
+    #        S1 <- sqrt(abs((n1/(n1-1)) * S1))
+    #        P = as.matrix(as.numeric(colnames(A) %in% groupB))
+    #        n2 <- sum(P[,1])
+    #        M2 <- A %*% P
+    #        M2 <- M2/n2
+    #        A2 <- A*A
+    #        S2 <- A2 %*% P
+    #        S2 <- S2/n2 - M2*M2
+    #        S2 <- sqrt(abs((n2/(n2-1)) * S2))
+    #        rm(A2)
+    #        # small sigma "fix" as used in GeneCluster
+    #        S2 <- ifelse(0.2*abs(M2) < S2, S2, 0.2*abs(M2))
+    #        S2 <- ifelse(S2 == 0, 0.2, S2)
+    #        S1 <- ifelse(0.2*abs(M1) < S1, S1, 0.2*abs(M1))
+    #        S1 <- ifelse(S1 == 0, 0.2, S1)
+    #        M1 <- M1 - M2
+    #        rm(M2)
+    #        S1 <- S1 + S2
+    #        rm(S2)
+    #        s2n.matrix <- M1/S1
+    #        ##----Reformatting----##
+    #        s2n.df <- as.data.frame(s2n.matrix)
+    #        s2n.df$GeneID <- rownames(s2n.df)
+    #        rownames(s2n.df) <- NULL
+    #        data <- dplyr::select(s2n.df, GeneID, V1)
+    #        data.gsea <- data$V1
+    #        names(data.gsea) <- as.character(data$GeneID)
+    #        s2n.matrix.s <- sort(data.gsea, decreasing = T)
+    #        ##----GSEA----##
+    #        gmt.i <- GStable.ubg()
+    #        gsea.res <- GSEA(s2n.matrix.s, TERM2GENE = gmt.i, verbose = F, pvalueCutoff = input$userPval)
+    #        gsea.df <- as_tibble(gsea.res@result)
+    #        ## displaying the GSEA results as interactive data table
+    #        DT::datatable(gsea.df,
+    #                      extensions = c("KeyTable", "FixedHeader"),
+    #                      caption = "Enriched Signatures",
+    #                      options = list(keys = T, searchHighlight = T, pageLength = 10, lengthMenu = c("10", "25", "50", "100"), scrollX = T)) %>%
+    #            formatRound(columns = c(2:10), digits = 2)
+    #    }
+    #})
     
     #render variable genes list in sidebar from heatmap
     output$MostVariableGenesList <- DT::renderDataTable({
-	expr = updated_expr()
-	meta = meta()
-
+        expr = updated_expr()
+        meta = meta()
+        
         top_probes <- input$NumFeatures
         col_labels <- colnames(expr)
         isexpr <- rowSums(expr[,col_labels] > 1) >= length(col_labels)
@@ -1272,11 +1616,11 @@ server <- function(input, output, session) {
     
     #render DEG table
     output$DEGtable1 <- DT::renderDataTable({
-	expr = updated_expr()
-	meta = meta()
+        expr = updated_expr()
+        meta = meta()
         A <- meta[which(meta[,2] == input$comparisonA2.DEG),1]
         B <- meta[which(meta[,2] == input$comparisonB2.DEG),1]
-
+        
         #A <- meta[,1][meta[,2] == input$comparisonA2.DEG]
         #B <- meta[,1][meta[,2] == input$comparisonB2.DEG]
         mat <- expr[,c(A,B)]
@@ -1295,10 +1639,14 @@ server <- function(input, output, session) {
     
     #render up regulated pathway enrichment data table
     output$UpRegPathwayTable1 <- DT::renderDataTable({
+        expr = updated_expr()
+        meta = meta()
         adjp <- input$pathpval
         FC <- input$pathFC
-        A <- meta[,1][meta[,2] == input$comparisonA2.path]
-        B <- meta[,1][meta[,2] == input$comparisonB2.path]
+        A <- meta[which(meta[,2] == input$comparisonA2.path),1]
+        B <- meta[which(meta[,2] == input$comparisonB2.path),1]
+        #A <- meta[,1][meta[,2] == input$comparisonA2.path]
+        #B <- meta[,1][meta[,2] == input$comparisonB2.path]
         mat <- expr[,c(A,B)]
         mat <- log2(mat + 1.0)
         groupAOther <- factor(c(rep("A", length(A)), rep("B", length(B))))
@@ -1323,11 +1671,13 @@ server <- function(input, output, session) {
     
     #render down regulated pathway enrichment data table
     output$DnRegPathwayTable1 <- DT::renderDataTable({
+        expr = updated_expr()
+        meta = meta()
         adjp <- input$pathpval
         FC <- input$pathFC
         A <- meta[which(meta[,2] == input$comparisonA2.path),1]
         B <- meta[which(meta[,2] == input$comparisonB2.path),1]
-	
+        
         #A <- meta[,1][meta[,2] == input$comparisonA2.path]
         #B <- meta[,1][meta[,2] == input$comparisonB2.path]
         mat <- expr[,c(A,B)]
@@ -1354,17 +1704,31 @@ server <- function(input, output, session) {
     
     #render gene list table for boxplot selection
     output$GeneListTable <- DT::renderDataTable({
-	geneList = geneList()
+        geneList <- geneList()
         DT::datatable(geneList,
                       selection = 'single',
-                      options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100")))
+                      options = list(keys = TRUE,
+                                     searchHighlight = TRUE,
+                                     pageLength = 10,
+                                     lengthMenu = c("10", "25", "50", "100")))
+    })
+    
+    #render gene list table for boxplot selection
+    output$GeneListTable2 <- DT::renderDataTable({
+        geneList <- geneList()
+        DT::datatable(geneList,
+                      selection = 'single',
+                      options = list(keys = TRUE,
+                                     searchHighlight = TRUE,
+                                     pageLength = 10,
+                                     lengthMenu = c("10", "25", "50", "100")))
     })
     
     #render gene scatter plot data table
     output$geneScatterTable <- DT::renderDataTable({
         meta = meta();
         expr = updated_expr();
-	    
+        
         #log if user designates
         if (input$logask == TRUE) {
             expr <- log2(expr + 1)
@@ -1415,7 +1779,7 @@ server <- function(input, output, session) {
     output$ssGSEAtable <- DT::renderDataTable({
         meta = meta();
         expr = updated_expr();
-	    
+        
         if (input$tables == 3) {
             if (length(input$tab2table_rows_selected) > 0){
                 ssgsea <- ssGSEAfunc()
@@ -1492,7 +1856,7 @@ server <- function(input, output, session) {
     output$enrichplot0 <- renderPlot({
         meta = meta();
         expr = updated_expr();
-	A = as.matrix(expr) 
+        A = as.matrix(expr) 
         if (input$tables == 1){
             if (length(input$msigdbTable_rows_selected) > 0){
                 res <- datasetInput()
@@ -1529,11 +1893,11 @@ server <- function(input, output, session) {
                           pvalue_table = F)
             }
         }
-
+        
         #res <- datasetInput()
         #gsea.df <- as_tibble(res@result)
         #geneset <- as.matrix(msigdb.gsea2[input$msigdbTable_rows_selected,3])
-	#geneset = "HALLMARK_ADIPOGENESIS"
+        #geneset = "HALLMARK_ADIPOGENESIS"
         #title <- geneset
         #gseaplot2(res,
         #    geneset,
@@ -1543,14 +1907,14 @@ server <- function(input, output, session) {
     
     #render heatmap
     output$heatmap0 <- renderPlot({
-	expr = updated_expr()
-	meta = meta()
-	A = as.matrix(expr)
-
+        expr = updated_expr()
+        meta = meta()
+        A = as.matrix(expr)
+        
         if (input$tables == 1) {
             if (length(input$msigdbTable_rows_selected) > 0){
-        	groupA <- meta[which(meta[,2] == input$comparisonA),1]
-        	groupB <- meta[which(meta[,2] == input$comparisonB),1]		    
+                groupA <- meta[which(meta[,2] == input$comparisonA),1]
+                groupB <- meta[which(meta[,2] == input$comparisonB),1]		    
                 #groupA <- meta[,1][meta[,2] == input$comparisonA]
                 #groupB <- meta[,1][meta[,2] == input$comparisonB]
                 res <- datasetInput()
@@ -1606,7 +1970,7 @@ server <- function(input, output, session) {
                 groupB <- meta[which(meta[,2] == input$comparisonB),1]
                 #groupA <- meta[,1][meta[,2] == input$comparisonA]
                 #groupB <- meta[,1][meta[,2] == input$comparisonB]
-		    
+                
                 res <- datasetInput()
                 gsea.df <- as.data.frame(res@result)
                 GS <- as.character(GeneSet2[input$tab2table_rows_selected,1])
@@ -1659,7 +2023,7 @@ server <- function(input, output, session) {
                 groupB <- meta[which(meta[,2] == input$comparisonB),1]
                 #groupA <- meta[,1][meta[,2] == input$comparisonA]
                 #groupB <- meta[,1][meta[,2] == input$comparisonB]
-
+                
                 res <- datasetInput()
                 gsea.df <- as.data.frame(res@result)
                 GS <- as.character(user_gs_mirror()[input$GStable.u_rows_selected,1])
@@ -1708,91 +2072,23 @@ server <- function(input, output, session) {
         }
     })
     
-    #render RNAseq heatmap
-    output$heatmap1 <- renderPlot({
-	expr = updated_expr()
-	meta = meta()
-        if (input$customs == 444){
-            if (length(input$heatmapGeneSelec) >= 2 || length(input$userheatgenes) >= 1) {
-                genelist.uih <- NULL
-                genelist.ush <- NULL
-                genelist.uih2 <- NULL
-                genelist.ush <- input$heatmapGeneSelec
-                genelist.uih <- unlist(strsplit(input$userheatgenes, " "))
-                genelist.uih2 <- unlist(strsplit(input$userheatgenes, "\t"))
-                heatgenes <- c(genelist.ush,genelist.uih,genelist.uih2)
-                usersamps <- input$userheatsamp2
-                exp <- expr[heatgenes,usersamps]
-                meta2 <- meta2[which(meta2[,1] %in% usersamps),]
-                dataset <- exp
-                dataset <- log2(dataset + 1)
-                zdataset <- apply(dataset, 1, scale)
-                zdataset <- apply(zdataset, 1, rev)
-                colnames(zdataset) <- names(dataset)
-                dataset <- as.matrix(zdataset)
-                dataset[is.na(dataset)] <- 0
-                
-                dataset = dataset[apply(dataset[,-1], 1, function(x) !all(x==0)),]
-                minimum = -5;
-                maximum = 5;
-                if (abs(min(dataset)) > abs(max(dataset))) {
-                    dataset[dataset < -abs(max(dataset))] = -abs(max(dataset))
-                } else {
-                    dataset[dataset > abs(min(dataset))] = abs(min(dataset))
-                }
-                meta2 <- meta2[order(meta2[,2]),]
-                type <- meta2[,2]
-                meta2 <- as.data.frame(type)
-                rownames(meta2) <- meta[,1]
-                bk = c(seq(minimum,minimum/2, length=100), seq(minimum/2,maximum/2,length=100),seq(maximum/2,maximum,length=100))
-                hmcols<- colorRampPalette(c("dark blue","blue","white","red", "dark red"))(length(bk)-1)
-                pheatmap(dataset,
-                         cluster_col = F,
-                         cluster_row = T,
-                         fontsize_row = input$heatmapFont3.r,
-                         fontsize_col = input$heatmapFont3.c,
-                         show_rownames = T ,
-                         show_colnames = T,
-                         annotation_col = meta2,
-                         clustering_method = input$ClusteringMethod2,
-                         color=hmcols,
-                         border_color = NA)
-            }
-        }
-        else {
-            top_probes <- input$NumFeatures
-            exp <- expr
-            mad <- NULL
-            var <- NULL
-            cv <- NULL
-            var_type <- input$VarianceMeasure
-            if (var_type == "MAD"){
-                mad <- apply(log2(exp + 1), 1, mad)
-                mad <- sort(mad, decreasing = T)
-                mad <- head(mad, n = (top_probes +1))
-                out <- cbind(names(mad), mad[names(mad)], exp[names(mad),])
-                colnames(out) <- c("Gene", "MAD", colnames(exp))
-                dataset <- exp[names(mad),]
-                variable_gene_list <- names(mad)
-            }
-            else if (var_type == "VAR"){
-                var <- apply(log2(exp + 1), 1, var)
-                var <- sort(var, decreasing = T)
-                var <- head(var, n = (top_probes +1))
-                out <- cbind(names(var), var[names(var)], exp[names(var),])
-                colnames(out) <- c("Gene", "VAR", colnames(exp))
-                dataset <- exp[names(var),]
-                variable_gene_list <- names(var)
-            }
-            else if (var_type == "CV"){
-                cv <- apply(log2(exp + 1), 1, cv)
-                cv <- sort(cv, decreasing = T)
-                cv <- head(cv, n = (top_probes +1))
-                out <- cbind(names(cv), cv[names(cv)], exp[names(cv),])
-                colnames(out) <- c("Gene", "VAR", colnames(exp))
-                dataset <- exp[names(cv),]
-                variable_gene_list <- names(cv)
-            }
+    #render custom DEG heatmap
+    output$heatmap2 <- renderPlot({
+        expr = updated_expr()
+        meta = meta()
+        
+        if (length(input$heatmapGeneSelec) >= 2 || length(input$userheatgenes) >= 1) {
+            genelist.uih <- NULL
+            genelist.ush <- NULL
+            genelist.uih2 <- NULL
+            genelist.ush <- input$heatmapGeneSelec
+            genelist.uih <- unlist(strsplit(input$userheatgenes, " "))
+            genelist.uih2 <- unlist(strsplit(input$userheatgenes, "\t"))
+            heatgenes <- c(genelist.ush,genelist.uih,genelist.uih2)
+            usersamps <- input$userheatsamp2
+            exp <- expr[heatgenes,usersamps]
+            meta <- meta[which(meta[,1] %in% usersamps),]
+            dataset <- exp
             dataset <- log2(dataset + 1)
             zdataset <- apply(dataset, 1, scale)
             zdataset <- apply(zdataset, 1, rev)
@@ -1808,25 +2104,217 @@ server <- function(input, output, session) {
             } else {
                 dataset[dataset > abs(min(dataset))] = abs(min(dataset))
             }
+            meta <- meta[order(meta[,2]),]
             type <- meta[,2]
             meta2 <- as.data.frame(type)
             rownames(meta2) <- meta[,1]
             bk = c(seq(minimum,minimum/2, length=100), seq(minimum/2,maximum/2,length=100),seq(maximum/2,maximum,length=100))
             hmcols<- colorRampPalette(c("dark blue","blue","white","red", "dark red"))(length(bk)-1)
             pheatmap(dataset,
-                     cluster_col = T,
+                     cluster_col = F,
                      cluster_row = T,
-                     fontsize_row = input$heatmapFont2.r,
-                     fontsize_col = input$heatmapFont2.c,
+                     fontsize_row = input$heatmapFont3.r,
+                     fontsize_col = input$heatmapFont3.c,
                      show_rownames = T ,
-                     annotation_col = meta2,
                      show_colnames = T,
-                     clustering_method = input$ClusteringMethod,
+                     annotation_col = meta2,
+                     clustering_method = input$ClusteringMethod2,
                      color=hmcols,
                      border_color = NA)
         }
         
     })
+    
+    #render DEG heatmap
+    output$heatmap1 <- renderPlot({
+        expr = updated_expr()
+        meta = meta()
+        top_probes <- input$NumFeatures
+        exp <- expr
+        mad <- NULL
+        var <- NULL
+        cv <- NULL
+        var_type <- input$VarianceMeasure
+        if (var_type == "MAD"){
+            mad <- apply(log2(exp + 1), 1, mad)
+            mad <- sort(mad, decreasing = T)
+            mad <- head(mad, n = (top_probes +1))
+            out <- cbind(names(mad), mad[names(mad)], exp[names(mad),])
+            colnames(out) <- c("Gene", "MAD", colnames(exp))
+            dataset <- exp[names(mad),]
+            variable_gene_list <- names(mad)
+        }
+        else if (var_type == "VAR"){
+            var <- apply(log2(exp + 1), 1, var)
+            var <- sort(var, decreasing = T)
+            var <- head(var, n = (top_probes +1))
+            out <- cbind(names(var), var[names(var)], exp[names(var),])
+            colnames(out) <- c("Gene", "VAR", colnames(exp))
+            dataset <- exp[names(var),]
+            variable_gene_list <- names(var)
+        }
+        else if (var_type == "CV"){
+            cv <- apply(log2(exp + 1), 1, cv)
+            cv <- sort(cv, decreasing = T)
+            cv <- head(cv, n = (top_probes +1))
+            out <- cbind(names(cv), cv[names(cv)], exp[names(cv),])
+            colnames(out) <- c("Gene", "CV", colnames(exp))
+            dataset <- exp[names(cv),]
+            variable_gene_list <- names(cv)
+        }
+        dataset <- log2(dataset + 1)
+        zdataset <- apply(dataset, 1, scale)
+        zdataset <- apply(zdataset, 1, rev)
+        colnames(zdataset) <- names(dataset)
+        dataset <- as.matrix(zdataset)
+        dataset[is.na(dataset)] <- 0
+        
+        dataset = dataset[apply(dataset[,-1], 1, function(x) !all(x==0)),]
+        minimum = -5;
+        maximum = 5;
+        if (abs(min(dataset)) > abs(max(dataset))) {
+            dataset[dataset < -abs(max(dataset))] = -abs(max(dataset))
+        } else {
+            dataset[dataset > abs(min(dataset))] = abs(min(dataset))
+        }
+        type <- meta[,2]
+        meta2 <- as.data.frame(type)
+        rownames(meta2) <- meta[,1]
+        bk = c(seq(minimum,minimum/2, length=100), seq(minimum/2,maximum/2,length=100),seq(maximum/2,maximum,length=100))
+        hmcols<- colorRampPalette(c("dark blue","blue","white","red", "dark red"))(length(bk)-1)
+        pheatmap(dataset,
+                 cluster_col = T,
+                 cluster_row = T,
+                 fontsize_row = input$heatmapFont2.r,
+                 fontsize_col = input$heatmapFont2.c,
+                 show_rownames = T ,
+                 annotation_col = meta2,
+                 show_colnames = T,
+                 clustering_method = input$ClusteringMethod,
+                 color=hmcols,
+                 border_color = NA)
+        
+    })
+    
+    ##render RNAseq heatmap
+    #output$heatmap1 <- renderPlot({
+    #    expr = updated_expr()
+    #    meta = meta()
+    #    if (input$customs == 444){
+    #        if (length(input$heatmapGeneSelec) >= 2 || length(input$userheatgenes) >= 1) {
+    #            genelist.uih <- NULL
+    #            genelist.ush <- NULL
+    #            genelist.uih2 <- NULL
+    #            genelist.ush <- input$heatmapGeneSelec
+    #            genelist.uih <- unlist(strsplit(input$userheatgenes, " "))
+    #            genelist.uih2 <- unlist(strsplit(input$userheatgenes, "\t"))
+    #            heatgenes <- c(genelist.ush,genelist.uih,genelist.uih2)
+    #            usersamps <- input$userheatsamp2
+    #            exp <- expr[heatgenes,usersamps]
+    #            meta <- meta[which(meta[,1] %in% usersamps),]
+    #            dataset <- exp
+    #            dataset <- log2(dataset + 1)
+    #            zdataset <- apply(dataset, 1, scale)
+    #            zdataset <- apply(zdataset, 1, rev)
+    #            colnames(zdataset) <- names(dataset)
+    #            dataset <- as.matrix(zdataset)
+    #            dataset[is.na(dataset)] <- 0
+    #            
+    #            dataset = dataset[apply(dataset[,-1], 1, function(x) !all(x==0)),]
+    #            minimum = -5;
+    #            maximum = 5;
+    #            if (abs(min(dataset)) > abs(max(dataset))) {
+    #                dataset[dataset < -abs(max(dataset))] = -abs(max(dataset))
+    #            } else {
+    #                dataset[dataset > abs(min(dataset))] = abs(min(dataset))
+    #            }
+    #            meta <- meta[order(meta[,2]),]
+    #            type <- meta[,2]
+    #            meta2 <- as.data.frame(type)
+    #            rownames(meta2) <- meta[,1]
+    #            bk = c(seq(minimum,minimum/2, length=100), seq(minimum/2,maximum/2,length=100),seq(maximum/2,maximum,length=100))
+    #            hmcols<- colorRampPalette(c("dark blue","blue","white","red", "dark red"))(length(bk)-1)
+    #            pheatmap(dataset,
+    #                     cluster_col = F,
+    #                     cluster_row = T,
+    #                     fontsize_row = input$heatmapFont3.r,
+    #                     fontsize_col = input$heatmapFont3.c,
+    #                     show_rownames = T ,
+    #                     show_colnames = T,
+    #                     annotation_col = meta2,
+    #                     clustering_method = input$ClusteringMethod2,
+    #                     color=hmcols,
+    #                     border_color = NA)
+    #        }
+    #    }
+    #    else {
+    #        top_probes <- input$NumFeatures
+    #        exp <- expr
+    #        mad <- NULL
+    #        var <- NULL
+    #        cv <- NULL
+    #        var_type <- input$VarianceMeasure
+    #        if (var_type == "MAD"){
+    #            mad <- apply(log2(exp + 1), 1, mad)
+    #            mad <- sort(mad, decreasing = T)
+    #            mad <- head(mad, n = (top_probes +1))
+    #            out <- cbind(names(mad), mad[names(mad)], exp[names(mad),])
+    #            colnames(out) <- c("Gene", "MAD", colnames(exp))
+    #            dataset <- exp[names(mad),]
+    #            variable_gene_list <- names(mad)
+    #        }
+    #        else if (var_type == "VAR"){
+    #            var <- apply(log2(exp + 1), 1, var)
+    #            var <- sort(var, decreasing = T)
+    #            var <- head(var, n = (top_probes +1))
+    #            out <- cbind(names(var), var[names(var)], exp[names(var),])
+    #            colnames(out) <- c("Gene", "VAR", colnames(exp))
+    #            dataset <- exp[names(var),]
+    #            variable_gene_list <- names(var)
+    #        }
+    #        else if (var_type == "CV"){
+    #            cv <- apply(log2(exp + 1), 1, cv)
+    #            cv <- sort(cv, decreasing = T)
+    #            cv <- head(cv, n = (top_probes +1))
+    #            out <- cbind(names(cv), cv[names(cv)], exp[names(cv),])
+    #            colnames(out) <- c("Gene", "VAR", colnames(exp))
+    #            dataset <- exp[names(cv),]
+    #            variable_gene_list <- names(cv)
+    #        }
+    #        dataset <- log2(dataset + 1)
+    #        zdataset <- apply(dataset, 1, scale)
+    #        zdataset <- apply(zdataset, 1, rev)
+    #        colnames(zdataset) <- names(dataset)
+    #        dataset <- as.matrix(zdataset)
+    #        dataset[is.na(dataset)] <- 0
+    #        
+    #        dataset = dataset[apply(dataset[,-1], 1, function(x) !all(x==0)),]
+    #        minimum = -5;
+    #        maximum = 5;
+    #        if (abs(min(dataset)) > abs(max(dataset))) {
+    #            dataset[dataset < -abs(max(dataset))] = -abs(max(dataset))
+    #        } else {
+    #            dataset[dataset > abs(min(dataset))] = abs(min(dataset))
+    #        }
+    #        type <- meta[,2]
+    #        meta2 <- as.data.frame(type)
+    #        rownames(meta2) <- meta[,1]
+    #        bk = c(seq(minimum,minimum/2, length=100), seq(minimum/2,maximum/2,length=100),seq(maximum/2,maximum,length=100))
+    #        hmcols<- colorRampPalette(c("dark blue","blue","white","red", "dark red"))(length(bk)-1)
+    #        pheatmap(dataset,
+    #                 cluster_col = T,
+    #                 cluster_row = T,
+    #                 fontsize_row = input$heatmapFont2.r,
+    #                 fontsize_col = input$heatmapFont2.c,
+    #                 show_rownames = T ,
+    #                 annotation_col = meta2,
+    #                 show_colnames = T,
+    #                 clustering_method = input$ClusteringMethod,
+    #                 color=hmcols,
+    #                 border_color = NA)
+    #    }
+    #    
+    #})
     
     #render MA plot
     output$MAPlot1 <- renderPlot({
@@ -1914,9 +2402,9 @@ server <- function(input, output, session) {
     
     #render boxplot
     output$boxplot1 <- renderPlot({
-        meta = meta();
-        expr = updated_expr();
-	geneList = geneList();
+        geneList <- geneList()
+        meta = meta()
+        expr = updated_expr()
         if (length(input$GeneListTable_rows_selected) > 0){
             gene <- geneList[input$GeneListTable_rows_selected, 1]
             min <- min(log2(expr[gene,] + 1.0))
@@ -1938,16 +2426,42 @@ server <- function(input, output, session) {
         }
     })
     
+    #render boxplot
+    output$boxplot3 <- renderPlot({
+        geneList <- geneList()
+        meta = meta()
+        expr = updated_expr()
+        if (length(input$GeneListTable2_rows_selected) > 0){
+            gene <- geneList[input$GeneListTable2_rows_selected, 1]
+            min <- min(log2(expr[gene,] + 1.0))
+            max <- max(log2(expr[gene,] + 1.0))
+            meta_temp <- meta
+            rownames(meta_temp) <- meta[,1]
+            meta_temp <- meta_temp %>%
+                select(Group)
+            data = merge(t(expr[gene,]), meta_temp, by=0)
+            colnames(data) = c("SampleName", "GeneExpr", "Cluster")
+            ggplot(data, aes(x=Cluster, y=log2(GeneExpr + 1.0))) +
+                geom_boxplot(outlier.colour="red", outlier.shape=8, outlier.size=1) +
+                geom_dotplot(binaxis='y', stackdir='center', dotsize=input$boxplotDot2) +
+                stat_compare_means(label = "p.signif") + ylim(min * 0.9, max * 1.3) +
+                theme_bw() +
+                labs(title= paste(gene, "Expression (log2)")) +
+                theme(axis.text.x = element_text(angle = 90, vjust = 0.25, hjust = 1),
+                      text = element_text(size = input$boxplot.font2))
+        }
+    })
+    
     #render up regulated pathway enrichment plot
     output$UpRegPathway1 <- renderPlot({
         meta = meta();
         expr = updated_expr();
-	    
+        
         adjp <- input$pathpval
         FC <- input$pathFC
         A <- meta[which(meta[,2] == input$comparisonA2.path),1]
         B <- meta[which(meta[,2] == input$comparisonB2.path),1]
-	
+        
         #A <- meta[,1][meta[,2] == input$comparisonA2.path]
         #B <- meta[,1][meta[,2] == input$comparisonB2.path]
         mat <- expr[,c(A,B)]
@@ -1975,13 +2489,13 @@ server <- function(input, output, session) {
     output$DnRegPathway1 <- renderPlot({
         meta = meta();
         expr = updated_expr();
-
-    
+        
+        
         adjp <- input$pathpval
         FC <- input$pathFC
         A <- meta[which(meta[,2] == input$comparisonA2.path),1]
         B <- meta[which(meta[,2] == input$comparisonB2.path),1]
-	
+        
         #A <- meta[,1][meta[,2] == input$comparisonA2.path]
         #B <- meta[,1][meta[,2] == input$comparisonB2.path]
         mat <- expr[,c(A,B)]
@@ -2009,7 +2523,7 @@ server <- function(input, output, session) {
     output$Volcano3 <- renderPlot({
         meta = meta();
         expr = updated_expr();
-	    
+        
         top2 <- topgenereact()
         #add color categories based on FC and pval
         top2['threshold'] <- "none"
@@ -2100,10 +2614,10 @@ server <- function(input, output, session) {
     
     #render ssGSEA boxplot
     output$boxplot2 <- renderPlot({
-	meta = meta()
-	expr = updated_expr()
-	A = as.matrix(expr)
-
+        meta = meta()
+        expr = updated_expr()
+        A = as.matrix(expr)
+        
         #if tab 2 selected
         if (input$tables == 3) {
             if (length(input$tab2table_rows_selected) > 0){
@@ -2222,9 +2736,9 @@ server <- function(input, output, session) {
     
     #render gene expression comparison scatter plot
     output$geneScatter0 <- renderPlotly({
-	expr = updated_expr();
-	meta = meta();
-
+        expr = updated_expr();
+        meta = meta();
+        
         #log if user designates
         if (input$logask == TRUE) {
             expr <- log2(expr + 1)
@@ -2281,7 +2795,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top_probes <- input$NumFeatures
             col_labels <- colnames(expr)
             isexpr <- rowSums(expr[,col_labels] > 1) >= length(col_labels)
@@ -2351,7 +2865,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             #transpose
             expr_t <- as.data.frame(t(expr))
             #reorder rowname to match meta for merging
@@ -2389,7 +2903,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             if (input$tables == 1) {
                 paste('ssGSEAscore_',names(gs[(msigdb.gsea2[input$msigdbTable_rows_selected,3])]),'.tsv',sep = '')
             }
@@ -2401,7 +2915,7 @@ server <- function(input, output, session) {
             }
         },
         content = function(file) {
-		
+            
             if (input$tables == 1) {
                 GS <- gs[(msigdb.gsea2[input$msigdbTable_rows_selected,3])]
             }
@@ -2439,7 +2953,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top_probes <- input$NumFeatures
             col_labels <- colnames(expr)
             isexpr <- rowSums(expr[,col_labels] > 1) >= length(col_labels)
@@ -2495,7 +3009,7 @@ server <- function(input, output, session) {
             colnames(output) = c("Cluster")
             A <- meta[which(meta[,2] == input$comparisonA2),1]
             B <- meta[which(meta[,2] == input$comparisonB2),1]
-
+            
             #A <- meta[,1][meta[,2] == input$comparisonA2]
             #B <- meta[,1][meta[,2] == input$comparisonB2]
             mat <- expr[,c(A,B)]
@@ -2542,7 +3056,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top1 <- topgenereact()
             genes <- rownames(top1)[which(top1$adj.P.Val < 0.05 & top1$logFC > 1)]
             dbs <- listEnrichrDbs() 
@@ -2579,7 +3093,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top1 <- topgenereact()
             genes <- rownames(top1)[which(top1$adj.P.Val < 0.05 & top1$logFC > 1)]
             dbs <- listEnrichrDbs() 
@@ -2616,7 +3130,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top1 <- topgenereact()
             genes <- rownames(top1)[which(top1$adj.P.Val < 0.05 & top1$logFC > 1)]
             dbs <- listEnrichrDbs() 
@@ -2640,7 +3154,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top1 <- topgenereact()
             genes <- rownames(top1)[which(top1$adj.P.Val < 0.05 & top1$logFC < -1)]
             dbs <- listEnrichrDbs() 
@@ -2665,7 +3179,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top_probes <- input$NumFeatures
             col_labels <- colnames(expr)
             isexpr <- rowSums(expr[,col_labels] > 1) >= length(col_labels)
@@ -2720,7 +3234,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top_probes <- input$NumFeatures
             col_labels <- colnames(expr)
             isexpr <- rowSums(expr[,col_labels] > 1) >= length(col_labels)
@@ -2777,7 +3291,7 @@ server <- function(input, output, session) {
     #download button for leading edge genes
     output$LEGdownload <- downloadHandler(
         filename = function() {
-
+            
             if (input$tables == 1){
                 if (length(input$msigdbTable_rows_selected) > 0){
                     GS <- msigdb.gsea2[input$msigdbTable_rows_selected,3]
@@ -2799,7 +3313,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             if (input$tables == 1){
                 if (length(input$msigdbTable_rows_selected) > 0){
                     GS <- msigdb.gsea2[input$msigdbTable_rows_selected,3]
@@ -2835,7 +3349,7 @@ server <- function(input, output, session) {
             meta = meta();
             expr = updated_expr();
             A = as.matrix(expr)
-		
+            
             top_probes <- input$NumFeatures
             col_labels <- colnames(expr)
             isexpr <- rowSums(expr[,col_labels] > 1) >= length(col_labels)
@@ -2891,7 +3405,7 @@ server <- function(input, output, session) {
             colnames(output) = c("Cluster")
             A <- meta[which(meta[,2] == input$comparisonA2),1]
             B <- meta[which(meta[,2] == input$comparisonB2),1]
-	    
+            
             #A <- meta[,1][meta[,2] == input$comparisonA2]
             #B <- meta[,1][meta[,2] == input$comparisonB2]
             mat <- expr[,c(A,B)]
@@ -2911,36 +3425,37 @@ server <- function(input, output, session) {
         }
     )
     
-    #download button for Enrich Sig Table
-    output$enrich_sig_download <- downloadHandler(
-        filename = function() {
-
-            groupA <- input$comparisonA
-            groupB <- input$comparisonB
-            paste(input$SigTableChoice,".tsv", sep = "")
-        },
-        content = function(file){
-            meta = meta();
-            expr = updated_expr();
-            A = as.matrix(expr)
-		
-            gsea.df <- as_tibble(get(ES_Tab_List[which(ES_Tab_List == paste("ES_table",match(input$SigTableChoice, SigNames),sep = ""))]))
-            write_delim(gsea.df, file, delim = '\t')
-        })
+    ##download button for Enrich Sig Table
+    #output$enrich_sig_download <- downloadHandler(
+    #    filename = function() {
+    #        
+    #        groupA <- input$comparisonA
+    #        groupB <- input$comparisonB
+    #        paste(input$SigTableChoice,".tsv", sep = "")
+    #    },
+    #    content = function(file){
+    #        meta = meta();
+    #        expr = updated_expr();
+    #        A = as.matrix(expr)
+    #        
+    #        gsea.df <- as_tibble(get(ES_Tab_List[which(ES_Tab_List == paste("ES_table",match(input$SigTableChoice, SigNames),sep = ""))]))
+    #        write_delim(gsea.df, file, delim = '\t')
+    #    }
+    #)
     
     #download button for user enriched signature table
     output$enrich_sig_download.u <- downloadHandler(
-						    
+        
         filename = function() {
             groupA <- input$comparisonA
             groupB <- input$comparisonB
             paste("Enrich_Sig_Table_",groupA,"vs",groupB,".tsv", sep = "")
         },
         content = function(file) {
-	    expr = updated_expr()
+            expr = updated_expr()
             meta = meta()
             A = as.matrix(expr)
-
+            
             if (input$tables == 3) {
                 groupA <- meta[which(meta[,2] == input$comparisonA),1]
                 groupB <- meta[which(meta[,2] == input$comparisonB),1]
@@ -2994,7 +3509,7 @@ server <- function(input, output, session) {
                 groupB <- meta[which(meta[,2] == input$comparisonB),1]
                 #groupA <- meta[,1][meta[,2] == input$comparisonA]
                 #groupB <- meta[,1][meta[,2] == input$comparisonB]
-		    
+                
                 ##----Signal-to-Noise Calculation----##
                 A <- A + 0.00000001
                 P = as.matrix(as.numeric(colnames(A) %in% groupA))
@@ -3047,10 +3562,10 @@ server <- function(input, output, session) {
     
     #NES and Pval output
     output$NESandPval <- renderText({
-            meta = meta();
-            expr = updated_expr();
-            A = as.matrix(expr)
-	    
+        meta = meta();
+        expr = updated_expr();
+        A = as.matrix(expr)
+        
         if (input$tables == 1){
             if (length(input$msigdbTable_rows_selected) > 0){
                 res <- datasetInput()
